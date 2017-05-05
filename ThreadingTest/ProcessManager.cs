@@ -105,7 +105,7 @@ namespace GitHub.Unity
                     }
                     catch (Exception e)
                     {
-                        logger.Error("Error while looking for {0} in {1}\n{2}", executable, directory, e);
+                        logger.Error(String.Format("Error while looking for {0} in {1}\n{2}", executable, directory, e));
                         return null;
                     }
                 })
