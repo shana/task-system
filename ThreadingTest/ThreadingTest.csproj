@@ -59,8 +59,8 @@
     <Compile Include="BaseOutputProcessor.cs" />
     <Compile Include="ConcurrentExclusiveInterleave.cs" />
     <Compile Include="ConfigOutputProcessor.cs" />
-    <Compile Include="GitConfigGetTaskTask.cs" />
-    <Compile Include="GitConfigListTaskTask.cs" />
+    <Compile Include="GitConfigGetTask.cs" />
+    <Compile Include="GitConfigListTask.cs" />
     <Compile Include="GitConfigSource.cs" />
     <Compile Include="IEnvironment.cs" />
     <Compile Include="ILogging.cs" />
