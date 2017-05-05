@@ -222,60 +222,41 @@ namespace ThreadingTest
     {
         static void Main(string[] args)
         {
-            var tasks = new Dictionary<GitConfigListTask, CancellationTokenSource>();
+
             var cts = new CancellationTokenSource();
             var processManager = new ProcessManager(cts.Token);
+
+            var syncContext = new ThreadSynchronizationContext(cts.Token);
+            var taskManager = new TaskManager(new SynchronizationContextTaskScheduler(syncContext), cts);
+
 
             for (int i = 0; i < 10; i++)
             {
                 var outputProcessor = new ConfigOutputProcessor();
                 var task = new GitConfigListTask(processManager, outputProcessor);
-                tasks.Add(task, cts);
-            }
-
-            Run(tasks, cts);
-        }
-
-        private static void Run(Dictionary<GitConfigListTask, CancellationTokenSource> tasks, CancellationTokenSource cts)
-        {
-            var syncContext = new ThreadSynchronizationContext(cts.Token);
-            var taskManager = new TaskManager(new SynchronizationContextTaskScheduler(syncContext), cts);
-
-            ITask task = null;
-
-            foreach (var t in tasks)
-            {
-
-                task = t.Key;
-                task.OnStart += tt => Console.WriteLine(String.Format("Executing id:{0} thread:{1}", tt.Task.Id, Thread.CurrentThread.ManagedThreadId));
-                task.OnEnd += tt => Console.WriteLine(String.Format("Finished id:{0} thread:{1}", tt.Task.Id, Thread.CurrentThread.ManagedThreadId));
-
-                Console.WriteLine("Scheduling task {0}", task.Task.Id);
-                taskManager.Schedule(task);
 
                 var other = new ActionTask<bool, List<KeyValuePair<string, string>>>(cts.Token, d =>
-                {
-                    Console.WriteLine("Results! {0}", d.Count);
-                    return true;
-                }, task as GitConfigListTask)
-                { Name = "Other", Affinity = TaskAffinity.Concurrent };
+                    {
+                        Console.WriteLine("Results! {0}", d.Count);
+                        return true;
+                    }, task);
+                other.Name = "Other";
+                other.Affinity = TaskAffinity.Concurrent;
+
                 other.OnStart += tt => Console.WriteLine(String.Format("Executing id:{0} thread:{1}", tt.Task.Id, Thread.CurrentThread.ManagedThreadId));
                 other.OnEnd += tt => Console.WriteLine(String.Format("Finished id:{0} thread:{1}", tt.Task.Id, Thread.CurrentThread.ManagedThreadId));
 
-                Console.WriteLine("Scheduling other {0}", other.Task.Id);
-                taskManager.Schedule(other);
 
-                var final = new ActionTask<bool, bool>(cts.Token, d =>
-                {
-                    return d;
-                }, other)
-                { Name = "Final", Affinity = TaskAffinity.UI };
-                Console.WriteLine("Scheduling final {0}", final.Task.Id);
+                var final = new ActionTask<bool, bool>(cts.Token, d => d, other);
+                final.Name = "Final";
+                final.Affinity = TaskAffinity.UI;
+
                 final.OnStart += tt => Console.WriteLine(String.Format("Executing id:{0} thread:{1}", tt.Task.Id, Thread.CurrentThread.ManagedThreadId));
                 final.OnEnd += tt => Console.WriteLine(String.Format("Finished id:{0} thread:{1}", tt.Task.Id, Thread.CurrentThread.ManagedThreadId));
 
-                taskManager.Schedule(final);
+                taskManager.Schedule(task, other, final);
             }
+
 
             Console.WriteLine("Done");
 
@@ -409,56 +390,102 @@ namespace ThreadingTest
             this.cts = cts;
         }
 
+        public void Schedule(params ITask[] tasks)
+        {
+            Guard.ArgumentNotNull(tasks, "tasks");
+
+            var enumerator = tasks.GetEnumerator();
+            bool isLast = !enumerator.MoveNext();
+            do
+            {
+                var task = enumerator.Current as ITask;
+                isLast = !enumerator.MoveNext();
+                Schedule(task, isLast);
+            } while (!isLast);
+        }
+
         public void Schedule(ITask task)
+        {
+            Schedule(task, true);
+        }
+
+        private void Schedule(ITask task, bool setupFaultHandler)
         {
             switch (task.Affinity)
             {
                 case TaskAffinity.Exclusive:
-                    ScheduleExclusive(task);
+                    ScheduleExclusive(task, setupFaultHandler);
                     break;
                 case TaskAffinity.UI:
-                    ScheduleUI(task);
+                    ScheduleUI(task, setupFaultHandler);
                     break;
                 case TaskAffinity.Concurrent:
                 default:
-                    ScheduleConcurrent(task);
+                    ScheduleConcurrent(task, setupFaultHandler);
                     break;
             }
         }
 
         public void ScheduleUI(ITask task)
         {
-            task.Task.ContinueWith(tt =>
-                {
-                    Console.WriteLine(String.Format("Exception ui! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException));
-                },
-                cts.Token, 
-                TaskContinuationOptions.OnlyOnFaulted,uiScheduler
-            );
+            ScheduleUI(task, true);
+        }
+
+        private void ScheduleUI(ITask task, bool setupFaultHandler)
+        {
+            if (setupFaultHandler)
+            {
+                task.Task.ContinueWith(tt =>
+                    {
+                        Console.WriteLine(String.Format("Exception ui! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException.Message));
+                    },
+                    cts.Token,
+                    TaskContinuationOptions.OnlyOnFaulted, uiScheduler
+                );
+            }
+            Console.WriteLine(String.Format("Schedule {0} {1}", task.Affinity, task.Task.Id));
             task.Start(uiScheduler);
         }
 
         public void ScheduleExclusive(ITask task)
         {
-            task.Task.ContinueWith(tt =>
-                {
-                    Console.WriteLine(String.Format("Exception exclusive! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException));
-                },
-                cts.Token,
-                TaskContinuationOptions.OnlyOnFaulted, uiScheduler
-            );
+            ScheduleExclusive(task, true);
+        }
+
+        private void ScheduleExclusive(ITask task, bool setupFaultHandler)
+        {
+            if (setupFaultHandler)
+            {
+                task.Task.ContinueWith(tt =>
+                    {
+                        Console.WriteLine(String.Format("Exception exclusive! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException.Message));
+                    },
+                    cts.Token,
+                    TaskContinuationOptions.OnlyOnFaulted, uiScheduler
+                );
+            }
+            Console.WriteLine(String.Format("Schedule {0} {1}", task.Affinity, task.Task.Id));
             task.Start(manager.ExclusiveTaskScheduler);
         }
 
         public void ScheduleConcurrent(ITask task)
         {
-            task.Task.ContinueWith(tt =>
-                {
-                    Console.WriteLine(String.Format("Exception concurrent! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException));
-                },
-                cts.Token,
-                TaskContinuationOptions.OnlyOnFaulted, uiScheduler
-            );
+            ScheduleConcurrent(task, true);
+        }
+
+        private void ScheduleConcurrent(ITask task, bool setupFaultHandler)
+        {
+            if (setupFaultHandler)
+            {
+                task.Task.ContinueWith(tt =>
+                    {
+                        Console.WriteLine(String.Format("Exception concurrent! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException.Message));
+                    },
+                    cts.Token,
+                    TaskContinuationOptions.OnlyOnFaulted, uiScheduler
+                );
+            }
+            Console.WriteLine(String.Format("Schedule {0} {1}", task.Affinity, task.Task.Id));
             task.Start(manager.ConcurrentTaskScheduler);
         }
     }
