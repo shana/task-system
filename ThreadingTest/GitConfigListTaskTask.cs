@@ -1,19 +1,31 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Threading;
 
 namespace GitHub.Unity
 {
-    class GitConfigListTaskTask : ProcessTaskTask<List<KeyValuePair<string, string>>, KeyValuePair<string, string>>
+    class GitConfigListTask : ProcessTaskWithListOutput<KeyValuePair<string, string>>
     {
-        private readonly static ConfigOutputProcessor defaultProcessor = new ConfigOutputProcessor();
-        public GitConfigListTaskTask(ProcessManager processManager, ConfigOutputProcessor processor = null) : base(processManager.Token, processor ?? defaultProcessor)
-        {
-            Guard.ArgumentNotNull(processManager, "processManager");
+        private readonly string arguments;
 
-            this.Name = "git config";
-            var psi = processManager.Configure("git", "config -l --show-origin");
-            Configure(psi);
+        public GitConfigListTask(GitConfigSource configSource, CancellationToken token, ConfigOutputProcessor processor = null)
+            : base(token, processor ?? new ConfigOutputProcessor())
+        {
+            var source = "";
+            if (configSource != GitConfigSource.NonSpecified)
+            {
+                source = "--";
+                source += configSource == GitConfigSource.Local
+                    ? "local"
+                    : (configSource == GitConfigSource.User
+                        ? "system"
+                        : "global");
+            }
+            arguments = String.Format("config {0} -l", source);
         }
 
+        public override string Name { get { return "git config list"; } }
+        public override string ProcessArguments { get { return arguments; } }
         public override TaskAffinity Affinity { get { return TaskAffinity.Exclusive; } }
     }
 }

@@ -34,8 +34,19 @@ namespace GitHub.Unity
 
     abstract class TaskBase<T, TData> : TaskBase<T>, ITask<T, TData>
     {
+        private ILogging logger;
+        protected ILogging Logger
+        {
+            get
+            {
+                if (logger == null)
+                    logger = Logging.GetLogger(GetType());
+                return logger;
+            }
+        }
+
         public TaskBase(CancellationToken token) : base(token)
-        {}
+        { }
 
         public event Action<TData> OnData;
         protected void RaiseOnData(TData data)
@@ -47,10 +58,10 @@ namespace GitHub.Unity
     abstract class TaskBase<T> : TaskBase, ITask<T>
     {
         public TaskBase(CancellationToken token) : base(token)
-        {}
+        { }
 
         public TaskBase(CancellationToken token, ITask dependsOn) : base(token, dependsOn)
-        {}
+        { }
 
         public new ITask<T> Start(TaskScheduler scheduler)
         {
@@ -121,7 +132,7 @@ namespace GitHub.Unity
                 {
                     DependsOn.Task.Wait();
                 }
-                catch(AggregateException ex)
+                catch (AggregateException ex)
                 {
                     throw new DependentTaskFailedException(DependsOn, ex.InnerException);
                 }
@@ -131,7 +142,6 @@ namespace GitHub.Unity
         public virtual bool Successful { get { return Task.Status == TaskStatus.RanToCompletion && Task.Status != TaskStatus.Faulted; } }
         public string Errors { get; protected set; }
         public Task Task { get; protected set; }
-        public string Name { get; set; }
 
         public event Action<ITask> OnStart;
         public event Action<ITask> OnEnd;
@@ -143,6 +153,7 @@ namespace GitHub.Unity
         public object AsyncState { get { return (Task as IAsyncResult).AsyncState; } }
 
         public bool CompletedSynchronously { get { return (Task as IAsyncResult).CompletedSynchronously; } }
+        public virtual string Name { get; set; }
         public virtual TaskAffinity Affinity { get; set; }
     }
 

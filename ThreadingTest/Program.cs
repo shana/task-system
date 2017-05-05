@@ -12,7 +12,7 @@ namespace GitHub.Unity
         {
 
             var cts = new CancellationTokenSource();
-            var processManager = new ProcessManager(cts.Token);
+            var processManager = new ProcessManager(new DefaultEnvironment(), new ProcessEnvironment(), cts.Token);
 
             var syncContext = new ThreadSynchronizationContext(cts.Token);
             var taskManager = new TaskManager(new SynchronizationContextTaskScheduler(syncContext), cts);
@@ -23,8 +23,7 @@ namespace GitHub.Unity
             {
                 if (key == ConsoleKey.Enter)
                 {
-                    var outputProcessor = new ConfigOutputProcessor();
-                    var task = new GitConfigListTaskTask(processManager, outputProcessor);
+                    var task = new GitConfigListTask(GitConfigSource.NonSpecified, cts.Token).Configure(processManager);
 
                     var other = new ActionTask<bool, List<KeyValuePair<string, string>>>(cts.Token, d =>
                     {

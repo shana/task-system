@@ -3,13 +3,8 @@ using System.Collections.Generic;
 
 namespace GitHub.Unity
 {
-    class ConfigOutputProcessor : BaseOutputProcessor<List<KeyValuePair<string, string>>, KeyValuePair<string, string>>
+    class ConfigOutputProcessor : BaseOutputListProcessor<KeyValuePair<string, string>>
     {
-        public ConfigOutputProcessor()
-        {
-            Result = new List<KeyValuePair<string, string>>();
-        }
-
         public override void LineReceived(string line)
         {
             if (String.IsNullOrEmpty(line))
@@ -22,7 +17,6 @@ namespace GitHub.Unity
             }
             var kvp = new KeyValuePair<string, string>(line.Substring(0, eqs), line.Substring(eqs + 1));
             RaiseOnEntry(kvp);
-            Result.Add(kvp);
         }
     }
 }

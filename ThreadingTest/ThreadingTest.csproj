@@ -61,8 +61,17 @@
     <Compile Include="ConfigOutputProcessor.cs" />
     <Compile Include="GitConfigGetTaskTask.cs" />
     <Compile Include="GitConfigListTaskTask.cs" />
+    <Compile Include="GitConfigSource.cs" />
+    <Compile Include="IEnvironment.cs" />
+    <Compile Include="ILogging.cs" />
+    <Compile Include="IProcessEnvironment.cs" />
+    <Compile Include="IProcessManager.cs" />
+    <Compile Include="Logging.cs" />
+    <Compile Include="NiceIO.cs" />
+    <Compile Include="NPathFileSystemProvider.cs" />
     <Compile Include="ProcessManager.cs" />
     <Compile Include="ProcessTask.cs" />
+    <Compile Include="StringExtensions.cs" />
     <Compile Include="TaskCanceledExceptions.cs" />
     <Compile Include="Guard.cs" />
     <Compile Include="Program.cs" />

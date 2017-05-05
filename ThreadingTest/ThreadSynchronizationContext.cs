@@ -53,15 +53,26 @@ namespace GitHub.Unity
             var lastTime = DateTime.Now.Ticks;
             var wait = new ManualResetEventSlim(false);
             var ticksPerFrame = TimeSpan.TicksPerMillisecond * 10;
+            var count = 0;
+            var secondStart = DateTime.Now.Ticks;
             while (!token.IsCancellationRequested)
             {
                 var current = DateTime.Now.Ticks;
                 var elapsed = current - lastTime;
+                count++;
+                if (current - secondStart > TimeSpan.TicksPerMillisecond * 1000)
+                {
+                    Console.WriteLine(String.Format("FPS {0}", count));
+                    count = 0;
+                    secondStart = current;
+                }
                 Pump();
                 lastTime = DateTime.Now.Ticks;
                 long waitTime = (current + ticksPerFrame - lastTime) / TimeSpan.TicksPerMillisecond;
                 if (waitTime > 0 && waitTime < int.MaxValue)
+                {
                     wait.Wait((int)waitTime, token);
+                }
             }
         }
 

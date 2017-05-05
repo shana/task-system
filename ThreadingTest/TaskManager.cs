@@ -74,7 +74,7 @@ namespace GitHub.Unity
             {
                 task.Task.ContinueWith(tt =>
                 {
-                    Console.WriteLine(String.Format("Exception ui! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException.Message));
+                    Console.WriteLine(String.Format("Exception ui! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException));
                 },
                     cts.Token,
                     TaskContinuationOptions.OnlyOnFaulted, uiScheduler
@@ -95,7 +95,7 @@ namespace GitHub.Unity
             {
                 task.Task.ContinueWith(tt =>
                 {
-                    Console.WriteLine(String.Format("Exception exclusive! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException.Message));
+                    Console.WriteLine(String.Format("Exception exclusive! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException));
                 },
                     cts.Token,
                     TaskContinuationOptions.OnlyOnFaulted, uiScheduler
@@ -116,7 +116,7 @@ namespace GitHub.Unity
             {
                 task.Task.ContinueWith(tt =>
                 {
-                    Console.WriteLine(String.Format("Exception concurrent! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException.Message));
+                    Console.WriteLine(String.Format("Exception concurrent! thread: {0} {1} {2}", Thread.CurrentThread.ManagedThreadId, tt.Id, tt.Exception.InnerException));
                 },
                     cts.Token,
                     TaskContinuationOptions.OnlyOnFaulted, uiScheduler
