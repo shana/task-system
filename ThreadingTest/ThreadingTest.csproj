@@ -58,12 +58,18 @@
     <Compile Include="ActionTask.cs" />
     <Compile Include="BaseOutputProcessor.cs" />
     <Compile Include="ConfigOutputProcessor.cs" />
+    <Compile Include="GitConfigGetTaskTask.cs" />
+    <Compile Include="GitConfigListTaskTask.cs" />
+    <Compile Include="ProcessManager.cs" />
+    <Compile Include="ProcessTask.cs" />
     <Compile Include="TaskCanceledExceptions.cs" />
     <Compile Include="Guard.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TaskBase.cs" />
     <Compile Include="TaskExtensions.cs" />
+    <Compile Include="TaskManager.cs" />
+    <Compile Include="ThreadSynchronizationContext.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Schedulers.csproj">

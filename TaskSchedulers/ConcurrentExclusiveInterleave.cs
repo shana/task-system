@@ -8,8 +8,7 @@ namespace System.Threading.Tasks.Schedulers
     [DebuggerTypeProxy(typeof(ConcurrentExclusiveInterleaveDebugView))]
     public sealed class ConcurrentExclusiveInterleave
     {
-        public event Action<Task, Exception> OnTaskException;
-
+        private readonly CancellationToken token;
         /// <summary>Synchronizes all activity in this type and its generated schedulers.</summary>
         private readonly object internalLock;
         /// <summary>The scheduler used to queue and execute "reader" tasks that may run concurrently with other readers.</summary>
@@ -24,8 +23,11 @@ namespace System.Threading.Tasks.Schedulers
         private Task taskExecuting;
 
         /// <summary>Initializes the ConcurrentExclusiveInterleave.</summary>
-        public ConcurrentExclusiveInterleave() : this(TaskScheduler.Current, false)
-        {}
+        /// <param name="token"></param>
+        public ConcurrentExclusiveInterleave(CancellationToken token) : this(TaskScheduler.Current, false)
+        {
+            this.token = token;
+        }
 
         /// <summary>Initialies the ConcurrentExclusiveInterleave.</summary>
         /// <param name="exclusiveProcessingIncludesChildren">Whether the exclusive processing of a task should include all of its children as well.</param>
@@ -54,12 +56,19 @@ namespace System.Threading.Tasks.Schedulers
             exclusiveTaskScheduler = new ConcurrentExclusiveTaskScheduler(this, new Queue<Task>(), 1);
         }
 
+        public void Wait()
+        {
+            taskExecuting?.Wait();
+        }
+
         /// <summary>Notifies the interleave that new work has arrived to be processed.</summary>
         /// <remarks>Must only be called while holding the lock.</remarks>
         internal void NotifyOfNewWork()
         {
-            // If a task is already running, bail.  
+            // If a task is already running, bail.
             if (taskExecuting != null) return;
+
+            if (token.IsCancellationRequested) return;
 
             // Otherwise, run the processor. Store the task and then start it to ensure that 
             // the assignment happens before the body of the task runs.
@@ -71,6 +80,8 @@ namespace System.Threading.Tasks.Schedulers
         /// <remarks>This has been separated out into its own method to improve the Parallel Tasks window experience.</remarks>
         private void ConcurrentExclusiveInterleaveProcessor()
         {
+            if (token.IsCancellationRequested) return;
+
             // Run while there are more tasks to be processed.  We assume that the first time through,
             // there are tasks.  If they aren't, worst case is we try to process and find none.
             var runTasks = true;
@@ -82,6 +93,8 @@ namespace System.Threading.Tasks.Schedulers
                     // Process all waiting exclusive tasks
                     foreach (var task in GetExclusiveTasks())
                     {
+                        if (token.IsCancellationRequested) return;
+
                         exclusiveTaskScheduler.ExecuteTask(task);
                         // Just because we executed the task doesn't mean it's "complete",
                         // if it has child tasks that have not yet completed
@@ -97,6 +110,8 @@ namespace System.Threading.Tasks.Schedulers
                             return;
                         }
                     }
+
+                    if (token.IsCancellationRequested) return;
 
                     // Process all waiting concurrent tasks *until* any exclusive tasks show up, in which
                     // case we want to switch over to processing those (by looping around again).
@@ -136,6 +151,8 @@ namespace System.Threading.Tasks.Schedulers
         {
             while (true)
             {
+                if (token.IsCancellationRequested) yield break;
+
                 Task foundTask = null;
                 lock(internalLock)
                 {
@@ -144,6 +161,7 @@ namespace System.Threading.Tasks.Schedulers
                         foundTask = concurrentTaskScheduler.Tasks.Dequeue();
                     }
                 }
+                if (token.IsCancellationRequested) yield break;
                 if (foundTask != null) yield return foundTask;
                 else yield break;
             }
@@ -156,11 +174,14 @@ namespace System.Threading.Tasks.Schedulers
         {
             while (true)
             {
+                if (token.IsCancellationRequested) yield break;
+
                 Task foundTask = null;
                 lock(internalLock)
                 {
                     if (exclusiveTaskScheduler.Tasks.Count > 0) foundTask = exclusiveTaskScheduler.Tasks.Dequeue();
                 }
+                if (token.IsCancellationRequested) yield break;
                 if (foundTask != null) yield return foundTask;
                 else yield break;
             }
