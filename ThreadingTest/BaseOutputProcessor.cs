@@ -1,6 +1,6 @@
 using System;
 
-namespace ThreadingTest
+namespace GitHub.Unity
 {
     interface IOutputProcessor<TResults, TResultEntry>
     {

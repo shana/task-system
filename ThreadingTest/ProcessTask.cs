@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ThreadingTest
+namespace GitHub.Unity
 {
     interface IProcessTask<T> : ITask<T>
     {

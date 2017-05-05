@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Threading;
 
-namespace ThreadingTest
+namespace GitHub.Unity
 {
     class ProcessManager
     {

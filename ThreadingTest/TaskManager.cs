@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Schedulers;
 
-namespace ThreadingTest
+namespace GitHub.Unity
 {
     class TaskManager
     {

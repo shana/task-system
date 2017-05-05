@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks.Schedulers;
 
-namespace ThreadingTest
+namespace GitHub.Unity
 {
     class Program
     {

@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 
-namespace ThreadingTest
+namespace GitHub.Unity
 {
     static class TaskExtensions
     {

@@ -59,7 +59,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="TaskSchedulers\ConcurrentExclusiveInterleave.cs" />
     <Compile Include="TaskSchedulers\CurrentThreadTaskScheduler.cs" />
     <Compile Include="TaskSchedulers\QueuedTaskScheduler.cs" />
     <Compile Include="TaskSchedulers\LimitedConcurrencyLevelTaskScheduler.cs" />

@@ -57,6 +57,7 @@
   <ItemGroup>
     <Compile Include="ActionTask.cs" />
     <Compile Include="BaseOutputProcessor.cs" />
+    <Compile Include="ConcurrentExclusiveInterleave.cs" />
     <Compile Include="ConfigOutputProcessor.cs" />
     <Compile Include="GitConfigGetTaskTask.cs" />
     <Compile Include="GitConfigListTaskTask.cs" />

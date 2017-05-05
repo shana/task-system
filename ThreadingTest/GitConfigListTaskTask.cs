@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace ThreadingTest
+namespace GitHub.Unity
 {
     class GitConfigListTaskTask : ProcessTaskTask<List<KeyValuePair<string, string>>, KeyValuePair<string, string>>
     {

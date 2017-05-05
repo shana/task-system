@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ThreadingTest
+namespace GitHub.Unity
 {
     class ConfigOutputProcessor : BaseOutputProcessor<List<KeyValuePair<string, string>>, KeyValuePair<string, string>>
     {
