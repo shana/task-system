@@ -1,10 +1,18 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GitHub.Unity
 {
     static class TaskExtensions
     {
+        public static T Then<T>(this ITask task, T next)
+            where T : ITask
+        {
+            next.ContinueWith(task);
+            return next;
+        }
+
         public static async Task<T> Catch<T>(this Task<T> source, Func<Exception, T> handler = null)
         {
             try
@@ -69,6 +77,35 @@ namespace GitHub.Unity
         public static void Forget(this ITask task)
         {
             task.Task.Forget();
+        }
+
+        //http://stackoverflow.com/a/29491927
+        public static Action<T> Debounce<T>(this Action<T> func, int milliseconds = 300)
+        {
+            var last = 0;
+            return arg =>
+            {
+                var current = Interlocked.Increment(ref last);
+                TaskEx.Delay(milliseconds).ContinueWith(task =>
+                {
+                    if (current == last) func(arg);
+                    task.Dispose();
+                });
+            };
+        }
+
+        public static Action Debounce(this Action func, int milliseconds = 300)
+        {
+            var last = 0;
+            return () =>
+            {
+                var current = Interlocked.Increment(ref last);
+                TaskEx.Delay(milliseconds).ContinueWith(task =>
+                {
+                    if (current == last) func();
+                    task.Dispose();
+                });
+            };
         }
     }
 }

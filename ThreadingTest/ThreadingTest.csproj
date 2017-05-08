@@ -66,6 +66,7 @@
     <Compile Include="ILogging.cs" />
     <Compile Include="IProcessEnvironment.cs" />
     <Compile Include="IProcessManager.cs" />
+    <Compile Include="ITaskManager.cs" />
     <Compile Include="Logging.cs" />
     <Compile Include="NiceIO.cs" />
     <Compile Include="NPathFileSystemProvider.cs" />

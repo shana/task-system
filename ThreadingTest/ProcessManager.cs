@@ -27,12 +27,12 @@ namespace GitHub.Unity
             this.cancellationToken = cancellationToken;
         }
 
-        public T Configure<T>(T processTask) where T : IProcess
+        public T ConfigureGitProcess<T>(T processTask, bool withInput = false) where T : IProcess
         {
-            return Configure(processTask, environment.GitExecutablePath, processTask.ProcessArguments, environment.RepositoryPath);
+            return Configure(processTask, environment.GitExecutablePath, processTask.ProcessArguments, environment.RepositoryPath, withInput);
         }
 
-        public T Configure<T>(T processTask, string executableFileName, string arguments, string workingDirectory)
+        public T Configure<T>(T processTask, string executableFileName, string arguments, string workingDirectory = null, bool withInput = false)
              where T : IProcess
         {
             Guard.ArgumentNotNull(executableFileName, nameof(executableFileName));
@@ -40,7 +40,7 @@ namespace GitHub.Unity
             //logger.Trace("Configuring process - \"" + executableFileName + " " + arguments + "\" cwd:" + workingDirectory);
             var startInfo = new ProcessStartInfo
             {
-                RedirectStandardInput = true,
+                RedirectStandardInput = withInput,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -49,7 +49,7 @@ namespace GitHub.Unity
                 StandardErrorEncoding = Encoding.UTF8
             };
 
-            gitEnvironment.Configure(startInfo, workingDirectory);
+            gitEnvironment.Configure(startInfo, workingDirectory ?? environment.RepositoryPath);
             if (executableFileName.ToNPath().IsRelative)
                 executableFileName = FindExecutableInPath(executableFileName, startInfo.EnvironmentVariables["PATH"]) ?? executableFileName;
             startInfo.FileName = executableFileName;
@@ -105,7 +105,7 @@ namespace GitHub.Unity
                     }
                     catch (Exception e)
                     {
-                        logger.Error(String.Format("Error while looking for {0} in {1}\n{2}", executable, directory, e));
+                        logger.Error("Error while looking for {0} in {1}\n{2}", executable, directory, e);
                         return null;
                     }
                 })

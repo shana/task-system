@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace GitHub.Unity
 {
-    class TaskManager
+    class TaskManager : ITaskManager
     {
         private static readonly ILogging logger = Logging.GetLogger<ProcessManager>();
 
@@ -15,11 +15,15 @@ namespace GitHub.Unity
         public TaskScheduler ConcurrentScheduler { get { return manager.ConcurrentTaskScheduler; } }
         public TaskScheduler ExclusiveScheduler { get { return manager.ExclusiveTaskScheduler; } }
 
+        private static ITaskManager instance;
+        public static ITaskManager Instance => instance;
+
         public TaskManager(TaskScheduler uiScheduler, CancellationTokenSource cts)
         {
             this.manager = new ConcurrentExclusiveInterleave(cts.Token);
             this.uiScheduler = uiScheduler;
             this.cts = cts;
+            instance = this;
         }
 
         public void Stop()
@@ -28,7 +32,22 @@ namespace GitHub.Unity
             manager.Wait();
         }
 
-        public void Schedule(params ITask[] tasks)
+        public static TaskScheduler GetScheduler(TaskAffinity affinity)
+        {
+            switch (affinity)
+            {
+                case TaskAffinity.Exclusive:
+                    return Instance.ExclusiveScheduler;
+                case TaskAffinity.UI:
+                    return Instance.UIScheduler;
+                case TaskAffinity.Concurrent:
+                default:
+                    return Instance.ConcurrentScheduler;
+            }
+        }
+
+
+    public void Schedule(params ITask[] tasks)
         {
             Guard.ArgumentNotNull(tasks, "tasks");
 
@@ -42,89 +61,94 @@ namespace GitHub.Unity
             } while (!isLast);
         }
 
-        public void Schedule(ITask task)
+        public T Schedule<T>(T task)
+            where T : ITask
         {
-            Schedule(task, true);
+            return Schedule(task, true);
         }
 
-        private void Schedule(ITask task, bool setupFaultHandler)
+        private T Schedule<T>(T task, bool setupFaultHandler)
+            where T : ITask
         {
             switch (task.Affinity)
             {
                 case TaskAffinity.Exclusive:
-                    ScheduleExclusive(task, setupFaultHandler);
-                    break;
+                    return ScheduleExclusive(task, setupFaultHandler);
                 case TaskAffinity.UI:
-                    ScheduleUI(task, setupFaultHandler);
-                    break;
+                    return ScheduleUI(task, setupFaultHandler);
                 case TaskAffinity.Concurrent:
                 default:
-                    ScheduleConcurrent(task, setupFaultHandler);
-                    break;
+                    return ScheduleConcurrent(task, setupFaultHandler);
             }
         }
 
-        public void ScheduleUI(ITask task)
+        public T ScheduleUI<T>(T task)
+            where T : ITask
         {
-            ScheduleUI(task, true);
+            return ScheduleUI(task, true);
         }
 
-        private void ScheduleUI(ITask task, bool setupFaultHandler)
+        private T ScheduleUI<T>(T task, bool setupFaultHandler)
+            where T : ITask
         {
             if (setupFaultHandler)
             {
                 task.Task.ContinueWith(tt =>
-                {
-                    logger.Error(tt.Exception.InnerException, String.Format("Exception on ui thread: {0} {1}", tt.Id, task.Name));
-                },
+                    {
+                        logger.Error(tt.Exception.InnerException, String.Format("Exception on ui thread: {0} {1}", tt.Id, task.Name));
+                    },
                     cts.Token,
                     TaskContinuationOptions.OnlyOnFaulted, uiScheduler
                 );
             }
-            logger.Trace(String.Format("Schedule {0} {1}", task.Affinity, task.Task.Id));
-            task.Start(uiScheduler);
+            logger.Trace(String.Format("Schedule {0} {1}", "UI", task.Task.Id));
+            return (T)task.Start(uiScheduler);
         }
 
-        public void ScheduleExclusive(ITask task)
+        public T ScheduleExclusive<T>(T task)
+            where T : ITask
         {
-            ScheduleExclusive(task, true);
+            return ScheduleExclusive(task, true);
         }
 
-        private void ScheduleExclusive(ITask task, bool setupFaultHandler)
+        private T ScheduleExclusive<T>(T task, bool setupFaultHandler)
+            where T : ITask
         {
             if (setupFaultHandler)
             {
                 task.Task.ContinueWith(tt =>
-                {
-                    logger.Error(tt.Exception.InnerException, String.Format("Exception on exclusive thread: {0} {1}", tt.Id, task.Name));
-                },
+                    {
+                        logger.Error(tt.Exception.InnerException, String.Format("Exception on exclusive thread: {0} {1}", tt.Id, task.Name));
+                    },
                     cts.Token,
                     TaskContinuationOptions.OnlyOnFaulted, uiScheduler
                 );
             }
-            logger.Trace(String.Format("Schedule {0} {1}", task.Affinity, task.Task.Id));
-            task.Start(manager.ExclusiveTaskScheduler);
+            logger.Trace(String.Format("Schedule {0} {1}", "Exclusive", task.Task.Id));
+            return (T)task.Start(manager.ExclusiveTaskScheduler);
         }
 
-        public void ScheduleConcurrent(ITask task)
+        public T ScheduleConcurrent<T>(T task)
+            where T : ITask
         {
-            ScheduleConcurrent(task, true);
+            return ScheduleConcurrent(task, true);
         }
 
-        private void ScheduleConcurrent(ITask task, bool setupFaultHandler)
+        private T ScheduleConcurrent<T>(T task, bool setupFaultHandler)
+            where T : ITask
         {
             if (setupFaultHandler)
             {
                 task.Task.ContinueWith(tt =>
-                {
-                    logger.Error(tt.Exception.InnerException, String.Format("Exception on concurrent thread: {0} {1}", tt.Id, task.Name));
-                },
+                    {
+                        logger.Error(tt.Exception.InnerException, String.Format("Exception on concurrent thread: {0} {1}", tt.Id, task.Name));
+                    },
                     cts.Token,
                     TaskContinuationOptions.OnlyOnFaulted, uiScheduler
                 );
             }
-            logger.Trace(String.Format("Schedule {0} {1}", task.Affinity, task.Task.Id));
-            task.Start(manager.ConcurrentTaskScheduler);
+            logger.Trace(String.Format("Schedule {0} {1}", "Concurrent", task.Task.Id));
+            return (T)task.Start(manager.ConcurrentTaskScheduler);
         }
     }
 }

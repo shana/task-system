@@ -62,7 +62,7 @@ namespace GitHub.Unity
                 count++;
                 if (current - secondStart > TimeSpan.TicksPerMillisecond * 1000)
                 {
-                    Console.WriteLine(String.Format("FPS {0}", count));
+                    //Console.WriteLine(String.Format("FPS {0}", count));
                     count = 0;
                     secondStart = current;
                 }

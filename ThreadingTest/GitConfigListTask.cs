@@ -8,7 +8,7 @@ namespace GitHub.Unity
     {
         private readonly string arguments;
 
-        public GitConfigListTask(GitConfigSource configSource, CancellationToken token, ConfigOutputProcessor processor = null)
+        public GitConfigListTask(GitConfigSource configSource, CancellationToken token, BaseOutputListProcessor<KeyValuePair<string, string>> processor = null)
             : base(token, processor ?? new ConfigOutputProcessor())
         {
             var source = "";
@@ -26,6 +26,7 @@ namespace GitHub.Unity
 
         public override string Name { get { return "git config list"; } }
         public override string ProcessArguments { get { return arguments; } }
-        public override TaskAffinity Affinity { get { return TaskAffinity.Exclusive; } }
+        private TaskAffinity affinity = TaskAffinity.Concurrent;
+        public override TaskAffinity Affinity { get { return affinity; } set { affinity = value; } }
     }
 }

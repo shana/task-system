@@ -1,10 +1,87 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace GitHub.Unity
 {
+    class TaskSchedulerExcludingThread : TaskScheduler
+    {
+        private static ParameterizedThreadStart longRunningThreadWork = new ParameterizedThreadStart(LongRunningThreadWork);
+        private static WaitCallback taskExecuteWaitCallback = new WaitCallback(TaskExecuteWaitCallback);
+        private static MethodInfo executeEntryMethod;
+
+        static TaskSchedulerExcludingThread()
+        {
+            executeEntryMethod = typeof(Task).GetMethod("ExecuteEntry", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        }
+        public TaskSchedulerExcludingThread(int threadToExclude)
+        {
+            ThreadToExclude = threadToExclude;
+        }
+
+        private static void LongRunningThreadWork(object obj)
+        {
+            ExecuteEntry(obj as Task, true);
+        }
+
+        private static bool ExecuteEntry(Task task, bool flag)
+        {
+            
+            return (bool)executeEntryMethod.Invoke(task, new object[] { flag });
+        }
+
+        protected override void QueueTask(Task task)
+        {
+            if ((task.CreationOptions & TaskCreationOptions.LongRunning) != TaskCreationOptions.None)
+                new Thread(longRunningThreadWork)
+                {
+                    IsBackground = true
+                }.Start(task);
+            else
+                ThreadPool.QueueUserWorkItem(taskExecuteWaitCallback, (object)task);
+        }
+
+        private static void TaskExecuteWaitCallback(object obj)
+        {
+            ExecuteEntry(obj as Task, true);
+        }
+
+        protected override bool TryExecuteTaskInline(Task task, bool taskWasPreviouslyQueued)
+        {
+            try
+            {
+                if (Thread.CurrentThread.ManagedThreadId == ThreadToExclude)
+                    return false;
+                return ExecuteEntry(task, true);
+            }
+            finally
+            {
+                if (taskWasPreviouslyQueued)
+                    NotifyWorkItemProgress();
+            }
+        }
+
+        protected override bool TryDequeue(Task task)
+        {
+            return false;
+        }
+
+        protected override IEnumerable<Task> GetScheduledTasks()
+        {
+            yield return (Task)null;
+        }
+
+        private void NotifyWorkItemProgress()
+        {
+        }
+
+        public int ThreadToExclude { get; set; }
+    }
+
+
     /// <summary>Provides concurrent and exclusive task schedulers that coordinate.</summary>
     [DebuggerDisplay("ConcurrentTasksWaiting={ConcurrentTaskCount}, ExclusiveTasksWaiting={ExclusiveTaskCount}")]
     [DebuggerTypeProxy(typeof(ConcurrentExclusiveInterleaveDebugView))]
@@ -19,42 +96,32 @@ namespace GitHub.Unity
         private readonly bool exclusiveProcessingIncludesChildren;
         /// <summary>The scheduler used to queue and execute "writer" tasks that must run exclusively while no other tasks for this interleave are running.</summary>
         private readonly ConcurrentExclusiveTaskScheduler exclusiveTaskScheduler;
+        private readonly TaskSchedulerExcludingThread interleaveTaskScheduler;
         /// <summary>The parallel options used by the asynchronous task and parallel loops.</summary>
-        private readonly ParallelOptions parallelOptions;
+        private ParallelOptions parallelOptions;
         /// <summary>Whether this interleave has queued its processing task.</summary>
         private Task taskExecuting;
 
         /// <summary>Initializes the ConcurrentExclusiveInterleave.</summary>
         /// <param name="token"></param>
-        public ConcurrentExclusiveInterleave(CancellationToken token) : this(TaskScheduler.Current, false)
+        public ConcurrentExclusiveInterleave(CancellationToken token)
+            : this(false)
         {
             this.token = token;
         }
 
-        /// <summary>Initialies the ConcurrentExclusiveInterleave.</summary>
+        /// <summary>Initializes the ConcurrentExclusiveInterleave.</summary>
+        /// <param name="targetScheduler">The target scheduler on which this interleave should execute.</param>
         /// <param name="exclusiveProcessingIncludesChildren">Whether the exclusive processing of a task should include all of its children as well.</param>
         public ConcurrentExclusiveInterleave(bool exclusiveProcessingIncludesChildren)
-            : this(TaskScheduler.Current, exclusiveProcessingIncludesChildren)
-        {}
-
-        /// <summary>Initializes the ConcurrentExclusiveInterleave.</summary>
-        /// <param name="targetScheduler">The target scheduler on which this interleave should execute.</param>
-        public ConcurrentExclusiveInterleave(TaskScheduler targetScheduler) : this(targetScheduler, false)
-        {}
-
-        /// <summary>Initializes the ConcurrentExclusiveInterleave.</summary>
-        /// <param name="targetScheduler">The target scheduler on which this interleave should execute.</param>
-        /// <param name="exclusiveProcessingIncludesChildren">Whether the exclusive processing of a task should include all of its children as well.</param>
-        public ConcurrentExclusiveInterleave(TaskScheduler targetScheduler, bool exclusiveProcessingIncludesChildren)
         {
-            // A scheduler must be provided
-            Guard.ArgumentNotNull(targetScheduler, "targetScheduler");
+            interleaveTaskScheduler = new TaskSchedulerExcludingThread(Thread.CurrentThread.ManagedThreadId);
+            parallelOptions = new ParallelOptions { TaskScheduler =  interleaveTaskScheduler };
 
             // Create the state for this interleave
             internalLock = new object();
             this.exclusiveProcessingIncludesChildren = exclusiveProcessingIncludesChildren;
-            parallelOptions = new ParallelOptions { TaskScheduler = targetScheduler };
-            concurrentTaskScheduler = new ConcurrentExclusiveTaskScheduler(this, new Queue<Task>(), targetScheduler.MaximumConcurrencyLevel);
+            concurrentTaskScheduler = new ConcurrentExclusiveTaskScheduler(this, new Queue<Task>(), interleaveTaskScheduler.MaximumConcurrencyLevel);
             exclusiveTaskScheduler = new ConcurrentExclusiveTaskScheduler(this, new Queue<Task>(), 1);
         }
 
@@ -83,6 +150,7 @@ namespace GitHub.Unity
         private void ConcurrentExclusiveInterleaveProcessor()
         {
             if (token.IsCancellationRequested) return;
+            interleaveTaskScheduler.ThreadToExclude = Thread.CurrentThread.ManagedThreadId;
 
             // Run while there are more tasks to be processed.  We assume that the first time through,
             // there are tasks.  If they aren't, worst case is we try to process and find none.
