@@ -7,8 +7,8 @@ using NUnit.Framework;
 using System.Threading;
 using GitHub.Unity;
 using System.Threading.Tasks.Schedulers;
-using NUnit.Compatibility;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace IntegrationTests
 {
@@ -32,12 +32,7 @@ namespace IntegrationTests
     class ProcessTaskTests : BaseTest
     {
         [Test]
-        public void GitTest()
-        {
-            Run().Wait();
-        }
-
-        async Task Run()
+        public async Task GitTest()
         {
             var done = false;
             var output = new List<string>();
