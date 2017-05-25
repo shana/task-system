@@ -6,13 +6,6 @@ namespace GitHub.Unity
 {
     static class TaskExtensions
     {
-        public static T Then<T>(this ITask task, T next)
-            where T : ITask
-        {
-            next.ContinueWith(task);
-            return next;
-        }
-
         public static async Task<T> Catch<T>(this Task<T> source, Func<Exception, T> handler = null)
         {
             try

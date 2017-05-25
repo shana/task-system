@@ -87,8 +87,8 @@ namespace GitHub.Unity
                         {
                             var first = new GitConfigGetTask("user.name", GitConfigSource.NonSpecified, cts.Token) { Affinity = TaskAffinity.Concurrent }.ConfigureGitProcess(processManager);
                             var second = new GitConfigListTask(GitConfigSource.Global, cts.Token) { Affinity = TaskAffinity.Concurrent }.ConfigureGitProcess(processManager);
-                            var third = new ActionTask(cts.Token, () => Console.WriteLine("And we are done")) { Affinity = TaskAffinity.UI };
-                            second.Then(third);
+                            var third = new ActionTask(cts.Token, _ => Console.WriteLine("And we are done")) { Affinity = TaskAffinity.UI };
+                            second.ContinueWith(third);
                             taskManager.Schedule(first, second);
                         }
                     }

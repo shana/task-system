@@ -27,7 +27,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 
@@ -219,7 +218,7 @@ GitHub.Unity
             ThrowIfRoot();
 
             var newElements = (string[])_elements.Clone();
-            newElements[newElements.Length - 1] = NPathFileSystemProvider.Current.ChangeExtension(_elements[_elements.Length - 1], WithDot(extension));
+            newElements[newElements.Length - 1] = FileSystem.ChangeExtension(_elements[_elements.Length - 1], WithDot(extension));
             if (extension == string.Empty)
                 newElements[newElements.Length - 1] = newElements[newElements.Length - 1].TrimEnd('.');
             return new NPath(newElements, _isRelative, _driveLetter);
@@ -245,7 +244,7 @@ GitHub.Unity
 
         public string FileNameWithoutExtension
         {
-            get { return NPathFileSystemProvider.Current.GetFileNameWithoutExtension(FileName); }
+            get { return FileSystem.GetFileNameWithoutExtension(FileName); }
         }
 
         public IEnumerable<string> Elements
@@ -275,7 +274,7 @@ GitHub.Unity
 
         public bool DirectoryExists(NPath append)
         {
-            return NPathFileSystemProvider.Current.DirectoryExists(Combine(append).ToString());
+            return FileSystem.DirectoryExists(Combine(append).ToString());
         }
 
         public bool FileExists(string append = "")
@@ -285,7 +284,7 @@ GitHub.Unity
 
         public bool FileExists(NPath append)
         {
-            return NPathFileSystemProvider.Current.FileExists(Combine(append).ToString());
+            return FileSystem.FileExists(Combine(append).ToString());
         }
 
         public string ExtensionWithDot
@@ -346,6 +345,11 @@ GitHub.Unity
             return sb.ToString();
         }
 
+        public static implicit operator string(NPath path)
+        {
+            return path.ToString();
+        }
+
         static char Slash(SlashMode slashMode)
         {
             switch (slashMode)
@@ -355,22 +359,18 @@ GitHub.Unity
                 case SlashMode.Forward:
                     return '/';
                 default:
-                    if (NPathFileSystemProvider.Current != null)
-                        return NPathFileSystemProvider.Current.DirectorySeparatorChar;
-                    return Path.DirectorySeparatorChar;
+                    return FileSystem.DirectorySeparatorChar;
             }
         }
 
-        public static char DirectorySeparatorChar
+		public static char DirectorySeparatorChar
         {
             get
             {
-                if (NPathFileSystemProvider.Current != null)
-                    return NPathFileSystemProvider.Current.DirectorySeparatorChar;
-                return Path.DirectorySeparatorChar;
+                return FileSystem.DirectorySeparatorChar;
             }
         }
-
+		
         public override bool Equals(Object obj)
         {
             if (obj == null)
@@ -471,7 +471,7 @@ GitHub.Unity
 
         public IEnumerable<NPath> Files(string filter, bool recurse = false)
         {
-            return NPathFileSystemProvider.Current.GetFiles(ToString(), filter, recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).Select(s => new NPath(s));
+            return FileSystem.GetFiles(ToString(), filter, recurse ? System.IO.SearchOption.AllDirectories : System.IO.SearchOption.TopDirectoryOnly).Select(s => new NPath(s));
         }
 
         public IEnumerable<NPath> Files(bool recurse = false)
@@ -491,7 +491,7 @@ GitHub.Unity
 
         public IEnumerable<NPath> Directories(string filter, bool recurse = false)
         {
-            return NPathFileSystemProvider.Current.GetDirectories(ToString(), filter, recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).Select(s => new NPath(s));
+            return FileSystem.GetDirectories(ToString(), filter, recurse ? System.IO.SearchOption.AllDirectories : System.IO.SearchOption.TopDirectoryOnly).Select(s => new NPath(s));
         }
 
         public IEnumerable<NPath> Directories(bool recurse = false)
@@ -507,7 +507,7 @@ GitHub.Unity
             ThrowIfRelative();
             ThrowIfRoot();
             EnsureParentDirectoryExists();
-            NPathFileSystemProvider.Current.WriteAllBytes(ToString(), new byte[0]);
+            FileSystem.WriteAllBytes(ToString(), new byte[0]);
             return this;
         }
 
@@ -530,7 +530,7 @@ GitHub.Unity
             if (IsRoot)
                 throw new NotSupportedException("CreateDirectory is not supported on a root level directory because it would be dangerous:" + ToString());
 
-            NPathFileSystemProvider.Current.CreateDirectory(ToString());
+            FileSystem.CreateDirectory(ToString());
             return this;
         }
 
@@ -594,7 +594,7 @@ GitHub.Unity
 
                 absoluteDestination.EnsureParentDirectoryExists();
 
-                NPathFileSystemProvider.Current.FileCopy(ToString(), absoluteDestination.ToString(), true);
+                FileSystem.FileCopy(ToString(), absoluteDestination.ToString(), true);
                 return absoluteDestination;
             }
 
@@ -617,13 +617,13 @@ GitHub.Unity
                 throw new NotSupportedException("Delete is not supported on a root level directory because it would be dangerous:" + ToString());
 
             if (FileExists())
-                NPathFileSystemProvider.Current.FileDelete(ToString());
+                FileSystem.FileDelete(ToString());
             else if (DirectoryExists())
                 try
                 {
-                    NPathFileSystemProvider.Current.DirectoryDelete(ToString(), true);
+                    FileSystem.DirectoryDelete(ToString(), true);
                 }
-                catch (IOException)
+                catch (System.IO.IOException)
                 {
                     if (deleteMode == DeleteMode.Normal)
                         throw;
@@ -657,7 +657,7 @@ GitHub.Unity
                     Files().Delete();
                     Directories().Delete();
                 }
-                catch (IOException)
+                catch (System.IO.IOException)
                 {
                     if (Files(true).Any())
                         throw;
@@ -674,7 +674,7 @@ GitHub.Unity
             var random = new Random();
             while (true)
             {
-                var candidate = new NPath(NPathFileSystemProvider.Current.GetTempPath() + "/" + myprefix + "_" + random.Next());
+                var candidate = new NPath(FileSystem.GetTempPath() + "/" + myprefix + "_" + random.Next());
                 if (!candidate.Exists())
                     return candidate.CreateDirectory();
             }
@@ -701,13 +701,13 @@ GitHub.Unity
             if (FileExists())
             {
                 dest.EnsureParentDirectoryExists();
-                NPathFileSystemProvider.Current.FileMove(ToString(), dest.ToString());
+                FileSystem.FileMove(ToString(), dest.ToString());
                 return dest;
             }
 
             if (DirectoryExists())
             {
-                NPathFileSystemProvider.Current.DirectoryMove(ToString(), dest.ToString());
+                FileSystem.DirectoryMove(ToString(), dest.ToString());
                 return dest;
             }
 
@@ -722,7 +722,7 @@ GitHub.Unity
         {
             get
             {
-                return new NPath(NPathFileSystemProvider.Current.GetCurrentDirectory());
+                return new NPath(FileSystem.GetCurrentDirectory());
             }
         }
 
@@ -730,7 +730,7 @@ GitHub.Unity
         {
             get
             {
-                if (NPathFileSystemProvider.Current.DirectorySeparatorChar == '\\')
+                if (FileSystem.DirectorySeparatorChar == '\\')
                     return new NPath(Environment.GetEnvironmentVariable("USERPROFILE"));
                 return new NPath(Environment.GetEnvironmentVariable("HOME"));
             }
@@ -740,7 +740,7 @@ GitHub.Unity
         {
             get
             {
-                return new NPath(NPathFileSystemProvider.Current.GetTempPath());
+                return new NPath(FileSystem.GetTempPath());
             }
         }
 
@@ -783,7 +783,7 @@ GitHub.Unity
         public NPath FileMustExist()
         {
             if (!FileExists())
-                throw new FileNotFoundException("File was expected to exist : " + ToString());
+                throw new System.IO.FileNotFoundException("File was expected to exist : " + ToString());
 
             return this;
         }
@@ -791,7 +791,7 @@ GitHub.Unity
         public NPath DirectoryMustExist()
         {
             if (!DirectoryExists())
-                throw new DirectoryNotFoundException("Expected directory to exist : " + ToString());
+                throw new System.IO.DirectoryNotFoundException("Expected directory to exist : " + ToString());
 
             return this;
         }
@@ -855,35 +855,35 @@ GitHub.Unity
         {
             ThrowIfRelative();
             EnsureParentDirectoryExists();
-            NPathFileSystemProvider.Current.WriteAllText(ToString(), contents);
+            FileSystem.WriteAllText(ToString(), contents);
             return this;
         }
 
         public string ReadAllText()
         {
             ThrowIfRelative();
-            return NPathFileSystemProvider.Current.ReadAllText(ToString());
+            return FileSystem.ReadAllText(ToString());
         }
 
         public NPath WriteAllLines(string[] contents)
         {
             ThrowIfRelative();
             EnsureParentDirectoryExists();
-            NPathFileSystemProvider.Current.WriteAllLines(ToString(), contents);
+            FileSystem.WriteAllLines(ToString(), contents);
             return this;
         }
 
         public string[] ReadAllLines()
         {
             ThrowIfRelative();
-            return NPathFileSystemProvider.Current.ReadAllLines(ToString());
+            return FileSystem.ReadAllLines(ToString());
         }
-
-        public NPath WriteAllBytes(byte[] contents)
+		
+		public NPath WriteAllBytes(byte[] contents)
         {
             ThrowIfRelative();
             EnsureParentDirectoryExists();
-            NPathFileSystemProvider.Current.WriteAllBytes(ToString(), contents);
+            FileSystem.WriteAllBytes(ToString(), contents);
             return this;
         }
 
@@ -909,19 +909,22 @@ GitHub.Unity
 
         private static bool IsLinux()
         {
-            return NPathFileSystemProvider.Current.DirectoryExists("/proc");
+            return FileSystem.DirectoryExists("/proc");
         }
 
-        public static implicit operator NPath(string value)
+        private static IFileSystem _fileSystem;
+        public static IFileSystem FileSystem
         {
-            if (value == null) return null;
-
-            return new NPath(value);
-        }
-
-        public static implicit operator string(NPath path)
-        {
-            return path?.ToString();
+            get
+            {
+                if (_fileSystem == null)
+                    _fileSystem = new FileSystem();
+                return _fileSystem;
+            }
+            set
+            {
+                _fileSystem = value;
+            }
         }
     }
 
@@ -982,5 +985,230 @@ GitHub.Unity
     {
         Normal,
         Soft
+    }
+}
+
+namespace
+#if NICEIO
+NiceIO
+#else
+GitHub.Unity
+#endif
+
+{
+    using System.IO;
+
+    public interface IFileSystem
+    {
+        bool FileExists(string path);
+        string Combine(string path1, string path2);
+        string Combine(string path1, string path2, string path3);
+        string GetFullPath(string path);
+        IEnumerable<string> GetDirectories(string path);
+        IEnumerable<string> GetDirectories(string path, string pattern);
+        IEnumerable<string> GetDirectories(string path, string pattern, SearchOption searchOption);
+        string GetTempPath();
+        string GetDirectoryName(string path);
+        bool DirectoryExists(string path);
+        string GetParentDirectory(string path);
+        string GetRandomFileName();
+        string ChangeExtension(string path, string extension);
+        string GetFileNameWithoutExtension(string fileName);
+        IEnumerable<string> GetFiles(string path);
+        IEnumerable<string> GetFiles(string path, string pattern);
+        IEnumerable<string> GetFiles(string path, string pattern, SearchOption searchOption);
+        void WriteAllBytes(string path, byte[] bytes);
+        void CreateDirectory(string path);
+        void FileCopy(string sourceFileName, string destFileName, bool overwrite);
+        void FileDelete(string path);
+        void DirectoryDelete(string path, bool recursive);
+        void FileMove(string sourceFileName, string s);
+        void DirectoryMove(string toString, string s);
+        string GetCurrentDirectory();
+        void WriteAllText(string path, string contents);
+        Stream OpenRead(string path);
+        string ReadAllText(string path);
+        void WriteAllLines(string path, string[] contents);
+        string[] ReadAllLines(string path);
+        char DirectorySeparatorChar { get; }
+        bool ExistingPathIsDirectory(string path);
+        void SetCurrentDirectory(string currentDirectory);
+    }
+
+    class FileSystem : IFileSystem
+    {
+        private string _currentDirectory;
+
+        public FileSystem()
+        {
+        }
+
+        public void SetCurrentDirectory(string currentDirectory)
+        {
+            this._currentDirectory = currentDirectory;
+        }
+
+        public bool FileExists(string filename)
+        {
+            return File.Exists(filename);
+        }
+
+        public IEnumerable<string> GetDirectories(string path)
+        {
+            return Directory.GetDirectories(path);
+        }
+
+        public string GetTempPath()
+        {
+            return Path.GetTempPath();
+        }
+
+        public string Combine(string path1, string path2)
+        {
+            return Path.Combine(path1, path2);
+        }
+
+        public string Combine(string path1, string path2, string path3)
+        {
+            return Path.Combine(Path.Combine(path1, path2), path3);
+        }
+
+        public string GetFullPath(string path)
+        {
+            return Path.GetFullPath(path);
+        }
+
+        public string GetDirectoryName(string path)
+        {
+            return Path.GetDirectoryName(path);
+        }
+
+        public bool DirectoryExists(string path)
+        {
+            return Directory.Exists(path);
+        }
+
+        public bool ExistingPathIsDirectory(string path)
+        {
+            var attr = File.GetAttributes(path);
+            return (attr & FileAttributes.Directory) == FileAttributes.Directory;
+        }
+
+        public string GetParentDirectory(string path)
+        {
+            return Directory.GetParent(path).FullName;
+        }
+
+        public IEnumerable<string> GetDirectories(string path, string pattern)
+        {
+            return Directory.GetDirectories(path, pattern);
+        }
+
+        public IEnumerable<string> GetDirectories(string path, string pattern, SearchOption searchOption)
+        {
+            return Directory.GetDirectories(path, pattern, searchOption);
+        }
+
+        public string ChangeExtension(string path, string extension)
+        {
+            return Path.ChangeExtension(path, extension);
+        }
+
+        public string GetFileNameWithoutExtension(string fileName)
+        {
+            return Path.GetFileNameWithoutExtension(fileName);
+        }
+
+        public IEnumerable<string> GetFiles(string path)
+        {
+            return Directory.GetFiles(path);
+        }
+
+        public IEnumerable<string> GetFiles(string path, string pattern)
+        {
+            return Directory.GetFiles(path, pattern);
+        }
+
+        public IEnumerable<string> GetFiles(string path, string pattern, SearchOption searchOption)
+        {
+            return Directory.GetFiles(path, pattern, searchOption);
+        }
+
+        public void WriteAllBytes(string path, byte[] bytes)
+        {
+            File.WriteAllBytes(path, bytes);
+        }
+
+        public void CreateDirectory(string toString)
+        {
+            Directory.CreateDirectory(toString);
+        }
+
+        public void FileCopy(string sourceFileName, string destFileName, bool overwrite)
+        {
+            File.Copy(sourceFileName, destFileName, overwrite);
+        }
+
+        public void FileDelete(string path)
+        {
+            File.Delete(path);
+        }
+
+        public void DirectoryDelete(string path, bool recursive)
+        {
+            Directory.Delete(path, recursive);
+        }
+
+        public void FileMove(string sourceFileName, string destFileName)
+        {
+            File.Move(sourceFileName, destFileName);
+        }
+
+        public void DirectoryMove(string toString, string s)
+        {
+            Directory.Move(toString, s);
+        }
+
+        public string GetCurrentDirectory()
+        {
+            if (_currentDirectory != null)
+                return _currentDirectory;
+            return Directory.GetCurrentDirectory();
+        }
+
+        public void WriteAllText(string path, string contents)
+        {
+            File.WriteAllText(path, contents);
+        }
+
+        public string ReadAllText(string path)
+        {
+            return File.ReadAllText(path);
+        }
+
+        public void WriteAllLines(string path, string[] contents)
+        {
+            File.WriteAllLines(path, contents);
+        }
+
+        public string[] ReadAllLines(string path)
+        {
+            return File.ReadAllLines(path);
+        }
+
+        public char DirectorySeparatorChar
+        {
+            get { return Path.DirectorySeparatorChar; }
+        }
+
+        public string GetRandomFileName()
+        {
+            return Path.GetRandomFileName();
+        }
+
+        public Stream OpenRead(string path)
+        {
+            return File.OpenRead(path);
+        }
     }
 }
