@@ -8,22 +8,27 @@ namespace GitHub.Unity
     {
         private static readonly ILogging logger = Logging.GetLogger<ProcessManager>();
 
-        private readonly TaskScheduler uiScheduler;
         private readonly CancellationTokenSource cts;
         private readonly ConcurrentExclusiveInterleave manager;
-        public TaskScheduler UIScheduler { get { return uiScheduler; } }
+        public TaskScheduler UIScheduler { get; set; }
         public TaskScheduler ConcurrentScheduler { get { return manager.ConcurrentTaskScheduler; } }
         public TaskScheduler ExclusiveScheduler { get { return manager.ExclusiveTaskScheduler; } }
+        public CancellationToken Token { get { return cts.Token; } }
 
         private static ITaskManager instance;
         public static ITaskManager Instance => instance;
 
-        public TaskManager(TaskScheduler uiScheduler, CancellationTokenSource cts)
+        public TaskManager()
         {
+            cts = new CancellationTokenSource();
             this.manager = new ConcurrentExclusiveInterleave(cts.Token);
-            this.uiScheduler = uiScheduler;
-            this.cts = cts;
             instance = this;
+        }
+
+        public TaskManager(TaskScheduler uiScheduler)
+            : this()
+        {
+            this.UIScheduler = uiScheduler;
         }
 
         public void Stop()
@@ -47,7 +52,7 @@ namespace GitHub.Unity
         }
 
 
-    public void Schedule(params ITask[] tasks)
+        public void Schedule(params ITask[] tasks)
         {
             Guard.ArgumentNotNull(tasks, "tasks");
 
@@ -94,15 +99,15 @@ namespace GitHub.Unity
             if (setupFaultHandler)
             {
                 task.Task.ContinueWith(tt =>
-                    {
-                        logger.Error(tt.Exception.InnerException, String.Format("Exception on ui thread: {0} {1}", tt.Id, task.Name));
-                    },
+                {
+                    logger.Error(tt.Exception.InnerException, String.Format("Exception on ui thread: {0} {1}", tt.Id, task.Name));
+                },
                     cts.Token,
-                    TaskContinuationOptions.OnlyOnFaulted, uiScheduler
+                    TaskContinuationOptions.OnlyOnFaulted, UIScheduler
                 );
             }
             logger.Trace(String.Format("Schedule {0} {1}", "UI", task.Task.Id));
-            return (T)task.Start(uiScheduler);
+            return (T)task.Start(UIScheduler);
         }
 
         public T ScheduleExclusive<T>(T task)
@@ -117,11 +122,11 @@ namespace GitHub.Unity
             if (setupFaultHandler)
             {
                 task.Task.ContinueWith(tt =>
-                    {
-                        logger.Error(tt.Exception.InnerException, String.Format("Exception on exclusive thread: {0} {1}", tt.Id, task.Name));
-                    },
+                {
+                    logger.Error(tt.Exception.InnerException, String.Format("Exception on exclusive thread: {0} {1}", tt.Id, task.Name));
+                },
                     cts.Token,
-                    TaskContinuationOptions.OnlyOnFaulted, uiScheduler
+                    TaskContinuationOptions.OnlyOnFaulted, UIScheduler
                 );
             }
             logger.Trace(String.Format("Schedule {0} {1}", "Exclusive", task.Task.Id));
@@ -140,11 +145,11 @@ namespace GitHub.Unity
             if (setupFaultHandler)
             {
                 task.Task.ContinueWith(tt =>
-                    {
-                        logger.Error(tt.Exception.InnerException, String.Format("Exception on concurrent thread: {0} {1}", tt.Id, task.Name));
-                    },
+                {
+                    logger.Error(tt.Exception.InnerException, String.Format("Exception on concurrent thread: {0} {1}", tt.Id, task.Name));
+                },
                     cts.Token,
-                    TaskContinuationOptions.OnlyOnFaulted, uiScheduler
+                    TaskContinuationOptions.OnlyOnFaulted, UIScheduler
                 );
             }
             logger.Trace(String.Format("Schedule {0} {1}", "Concurrent", task.Task.Id));

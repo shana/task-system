@@ -16,15 +16,13 @@ namespace IntegrationTests
     {
         protected ITaskManager TaskManager { get; set; }
         protected IProcessManager ProcessManager { get; set; }
-        protected CancellationTokenSource CancelTokenSource { get; set; }
         [SetUp]
         public void Setup()
         {
-            
-            CancelTokenSource = new CancellationTokenSource();
-            ProcessManager = new ProcessManager(new DefaultEnvironment(), new ProcessEnvironment(), CancelTokenSource.Token);
-            var syncContext = new ThreadSynchronizationContext(CancelTokenSource.Token);
-            TaskManager = new TaskManager(new SynchronizationContextTaskScheduler(syncContext), CancelTokenSource);
+            TaskManager = new TaskManager();
+            var syncContext = new ThreadSynchronizationContext(TaskManager.Token);
+            TaskManager.UIScheduler = new SynchronizationContextTaskScheduler(syncContext);
+            ProcessManager = new ProcessManager(new DefaultEnvironment(), new ProcessEnvironment(), TaskManager.Token);
         }
     }
 
@@ -36,7 +34,7 @@ namespace IntegrationTests
         {
             var done = false;
             var output = new List<string>();
-            var first = new GitConfigGetTask("user.name", GitConfigSource.NonSpecified, CancelTokenSource.Token)
+            var first = new GitConfigGetTask("user.name", GitConfigSource.NonSpecified, TaskManager.Token)
                         { Affinity = TaskAffinity.UI }.ConfigureGitProcess(ProcessManager);
 
             var rest = first
@@ -49,7 +47,7 @@ namespace IntegrationTests
                     if (s)
                         output.Add(d);
                 })
-                .ContinueWith(new GitConfigListTask(GitConfigSource.Global, CancelTokenSource.Token)
+                .ContinueWith(new GitConfigListTask(GitConfigSource.Global, TaskManager.Token)
                         { Affinity = TaskAffinity.Exclusive }.ConfigureGitProcess(ProcessManager))
                 .ContinueWith((s, d) =>
                 {

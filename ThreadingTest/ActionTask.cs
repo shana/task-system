@@ -23,6 +23,12 @@ namespace GitHub.Unity
             this.Callback = action;
         }
 
+        public ActionTask(Task task)
+            : base(task)
+        {
+
+        }
+
         protected override void Run(bool success)
         {
             Logger.Debug(String.Format("Executing id:{0}", Task.Id));

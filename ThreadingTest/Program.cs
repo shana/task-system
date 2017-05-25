@@ -11,12 +11,11 @@ namespace GitHub.Unity
     {
         static void Main(string[] args)
         {
+            var taskManager = new TaskManager();
+            var syncContext = new ThreadSynchronizationContext(taskManager.Token);
+            taskManager.UIScheduler = new SynchronizationContextTaskScheduler(syncContext);
+            var processManager = new ProcessManager(new DefaultEnvironment(), new ProcessEnvironment(), taskManager.Token);
 
-            var cts = new CancellationTokenSource();
-            var processManager = new ProcessManager(new DefaultEnvironment(), new ProcessEnvironment(), cts.Token);
-
-            var syncContext = new ThreadSynchronizationContext(cts.Token);
-            var taskManager = new TaskManager(new SynchronizationContextTaskScheduler(syncContext), cts);
 
 
             ConsoleKey key;
@@ -85,9 +84,9 @@ namespace GitHub.Unity
                     {
                         for (int i = 0; i < 5; i++)
                         {
-                            var first = new GitConfigGetTask("user.name", GitConfigSource.NonSpecified, cts.Token) { Affinity = TaskAffinity.Concurrent }.ConfigureGitProcess(processManager);
-                            var second = new GitConfigListTask(GitConfigSource.Global, cts.Token) { Affinity = TaskAffinity.Concurrent }.ConfigureGitProcess(processManager);
-                            var third = new ActionTask(cts.Token, _ => Console.WriteLine("And we are done")) { Affinity = TaskAffinity.UI };
+                            var first = new GitConfigGetTask("user.name", GitConfigSource.NonSpecified, taskManager.Token) { Affinity = TaskAffinity.Concurrent }.ConfigureGitProcess(processManager);
+                            var second = new GitConfigListTask(GitConfigSource.Global, taskManager.Token) { Affinity = TaskAffinity.Concurrent }.ConfigureGitProcess(processManager);
+                            var third = new ActionTask(taskManager.Token, _ => Console.WriteLine("And we are done")) { Affinity = TaskAffinity.UI };
                             second.ContinueWith(third);
                             taskManager.Schedule(first, second);
                         }

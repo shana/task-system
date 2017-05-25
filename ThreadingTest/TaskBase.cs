@@ -66,6 +66,11 @@ namespace GitHub.Unity
             Task = new Task(() => Run(DependsOn?.Successful ?? true), Token, TaskCreationOptions.None);
         }
 
+        public TaskBase(Task task)
+        {
+            Task = task;
+        }
+
         public ITask SetDependsOn(ITask dependsOn)
         {
             DependsOn = dependsOn;
