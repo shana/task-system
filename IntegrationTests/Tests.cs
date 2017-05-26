@@ -35,9 +35,7 @@ namespace IntegrationTests
             var done = false;
             var output = new List<string>();
             var first = new GitConfigGetTask("user.name", GitConfigSource.NonSpecified, TaskManager.Token)
-                        { Affinity = TaskAffinity.UI }.ConfigureGitProcess(ProcessManager);
-
-            var rest = first
+                        { Affinity = TaskAffinity.UI }.ConfigureGitProcess(ProcessManager)
                 .ContinueWith((s, d) =>
                 {
                     return d;
@@ -56,8 +54,7 @@ namespace IntegrationTests
                 })
                 .ContinueWithUI(s => done = true);
 
-            first.Start();
-            await rest.Task;
+            await first.Start().Task;
 
             Assert.IsTrue(done);
             Console.WriteLine(String.Join(",", output.ToArray()));

@@ -113,7 +113,10 @@ namespace GitHub.Unity
 
         public virtual ITask Start(TaskScheduler scheduler)
         {
-            Task.Start(scheduler);
+            if (DependsOn != null && DependsOn.Task.Status == TaskStatus.Created)
+                DependsOn.Start();
+            else
+                Task.Start(scheduler);
             return this;
         }
 
@@ -127,7 +130,8 @@ namespace GitHub.Unity
             return Task.Wait(milliseconds, Token);
         }
 
-        protected abstract void Run(bool success);
+        protected virtual void Run(bool success)
+        { }
 
         protected virtual void RaiseOnStart()
         {
@@ -207,7 +211,10 @@ namespace GitHub.Unity
             return this;
         }
 
-        protected abstract TResult RunWithReturn(bool success);
+        protected virtual TResult RunWithReturn(bool success)
+        {
+            return default(TResult);
+        }
 
         public new event Action<ITask<TResult>> OnStart;
         public new event Action<ITask<TResult>> OnEnd;
@@ -236,10 +243,10 @@ namespace GitHub.Unity
     abstract class ListTaskBase<TResult, TData> : TaskBase<TResult>, ITask<TResult, TData>
     {
         public ListTaskBase(CancellationToken token)
-            : base(token) {}
+            : base(token) { }
 
         public ListTaskBase(CancellationToken token, ITask dependsOn)
-            : base(token, dependsOn) {}
+            : base(token, dependsOn) { }
 
         public event Action<TData> OnData;
         protected void RaiseOnData(TData data)
@@ -251,7 +258,7 @@ namespace GitHub.Unity
     abstract class ListTaskBase<T, TResult, TData> : TaskBase<T, TResult>, ITask<TResult, TData>
     {
         public ListTaskBase(CancellationToken token, ITask<T> dependsOn)
-            : base(token, dependsOn) {}
+            : base(token, dependsOn) { }
 
         public event Action<TData> OnData;
         protected void RaiseOnData(TData data)

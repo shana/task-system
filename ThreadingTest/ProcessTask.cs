@@ -409,11 +409,6 @@ namespace GitHub.Unity
             outputProcessor.OnEntry += x => RaiseOnData(x);
         }
 
-        protected override void Run(bool success)
-        {
-            throw new NotImplementedException();
-        }
-
         protected override List<T> RunWithReturn(bool success)
         {
             if (!success)
