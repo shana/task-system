@@ -221,7 +221,6 @@ namespace IntegrationTests
     [TestFixture]
     class Chains : BaseTest
     {
-
         [Test]
         public async Task ThrowingInterruptsTaskChainButAlwaysRunsFinallyAndCatch()
         {
@@ -251,7 +250,104 @@ namespace IntegrationTests
             Assert.IsNotNull(finallyException);
         }
 
+        [Test]
+        public async Task FinallyReportsException()
+        {
+            var success = false;
+            Exception finallyException = null;
+            var output = new List<string>();
+            var expectedOutput = new List<string> { "one name" };
 
+            var task =
+                new FuncTask<string>(Token, _ => "one name") { Affinity = TaskAffinity.UI }
+                .Then((s, d) => output.Add(d))
+                .Then(_ => { throw new Exception("an exception"); })
+                .Then(new FuncTask<string>(Token, _ => "another name") { Affinity = TaskAffinity.Exclusive })
+                .ThenInUI((s, d) => output.Add(d))
+                .Finally((s, e) =>
+                {
+                    success = s;
+                    finallyException = e;
+                });
+
+            await task.Start().Task;
+
+            Assert.IsFalse(success);
+            CollectionAssert.AreEqual(expectedOutput, output);
+            Assert.IsNotNull(finallyException);
+            Assert.AreEqual("an exception", finallyException.Message);
+        }
+
+        [Test]
+        public async Task CatchAlwaysRunsBeforeFinally()
+        {
+            var success = false;
+            Exception exception = null;
+            Exception finallyException = null;
+            var runOrder = new List<string>();
+            var output = new List<string>();
+            var expectedOutput = new List<string> { "one name" };
+
+            var task =
+                new FuncTask<string>(Token, _ => "one name") { Affinity = TaskAffinity.UI }
+                .Then((s, d) => output.Add(d))
+                .Then(_ => { throw new Exception("an exception"); })
+                .Then(new FuncTask<string>(Token, _ => "another name") { Affinity = TaskAffinity.Exclusive })
+                .Then((s, d) => output.Add(d))
+                .Catch(ex =>
+                {
+                    Thread.Sleep(300);
+                    lock(runOrder)
+                    {
+                        exception = ex;
+                        runOrder.Add("catch");
+                    }
+                })
+                .Finally((s, e) =>
+                {
+                    Thread.Sleep(300);
+                    lock (runOrder)
+                    {
+                        success = s;
+                        finallyException = e;
+                        runOrder.Add("finally");
+                    }
+                });
+
+            await task.Start().Task;
+
+            Assert.IsFalse(success);
+            CollectionAssert.AreEqual(expectedOutput, output);
+            Assert.IsNotNull(exception);
+            Assert.IsNotNull(finallyException);
+            Assert.AreEqual("an exception", exception.Message);
+            Assert.AreEqual("an exception", finallyException.Message);
+            CollectionAssert.AreEqual(new List<string> { "catch", "finally" }, runOrder);
+        }
+
+        [Test]
+        public async Task DoNotUseCatchAtTheEndOfAChain()
+        {
+            var success = false;
+            Exception exception = null;
+            var output = new List<string>();
+            var expectedOutput = new List<string> { "one name" };
+
+            var task =
+                new FuncTask<string>(Token, _ => "one name") { Affinity = TaskAffinity.UI }
+                .Then((s, d) => output.Add(d))
+                .Then(_ => { throw new Exception("an exception"); })
+                .Then(new FuncTask<string>(Token, _ => "another name") { Affinity = TaskAffinity.Exclusive })
+                .ThenInUI((s, d) => output.Add(d))
+                .Finally((_, __) => { })
+                .Catch(ex => { Thread.Sleep(20); exception = ex; });
+
+            await task.Start().Task;
+
+            Assert.IsFalse(success);
+            CollectionAssert.AreEqual(expectedOutput, output);
+            Assert.IsNull(exception);
+        }
     }
 
     static class KeyValuePair
