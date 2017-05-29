@@ -47,17 +47,24 @@ namespace GitHub.Unity
             };
         }
 
+        /// <summary>
+        /// Never end a chain with Catch, always use Finally instead
+        /// Catch sets a direct continuation on the previous task, which means await is not going to be
+        /// waiting for it to finish before returning (catch will run faster this way).
+        /// Always end a chain with Finally and use Catch statements in the middle of the chain.
+        /// </summary>
         public static T Catch<T>(this T task, Action<Exception> handler)
-        where T : ITask
+            where T : ITask
         {
             Guard.ArgumentNotNull(handler, "handler");
             task.Task.ContinueWith(t =>
-            {
-                handler(t.Exception is AggregateException ? t.Exception.InnerException : t.Exception);
-            },
+                {
+                    handler(t.Exception is AggregateException ? t.Exception.InnerException : t.Exception);
+                },
                 task.Token,
                 TaskContinuationOptions.OnlyOnFaulted,
                 TaskManager.GetScheduler(task.Affinity));
+            task.DependsOn?.Catch(handler);
             return task;
         }
 
