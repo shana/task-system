@@ -29,7 +29,6 @@ namespace GitHub.Unity
 
         private static bool ExecuteEntry(Task task, bool flag)
         {
-            
             return (bool)executeEntryMethod.Invoke(task, new object[] { flag });
         }
 

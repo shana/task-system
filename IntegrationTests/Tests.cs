@@ -27,6 +27,12 @@ namespace IntegrationTests
             TaskManager.UIScheduler = new SynchronizationContextTaskScheduler(syncContext);
             ProcessManager = new ProcessManager(new DefaultEnvironment(), new ProcessEnvironment(), Token);
         }
+
+        [TearDown]
+        public void Teardown()
+        {
+            TaskManager?.Stop();
+        }
     }
 
     [TestFixture]
@@ -399,6 +405,48 @@ namespace IntegrationTests
             var act = new ActionTask(task) { Affinity = TaskAffinity.UI };
             await act.StartAwait();
             CollectionAssert.AreEqual(new string[] { $"ran {uiThread}" }, runOrder);
+        }
+
+        [Test]
+        public async Task AsyncBodies()
+        {
+            var uiThread = 0;
+            await new ActionTask(Token, _ => uiThread = Thread.CurrentThread.ManagedThreadId) { Affinity = TaskAffinity.UI }.StartAwait();
+
+            var runOrder = new List<string>();
+            var act = new ActionTask(Token, _ => runOrder.Add($"ran 1"))
+                .ThenAsync(new Task<int>(() =>
+                    {
+                        runOrder.Add($"ran 2");
+                        return 10;
+                    }))
+
+                .ThenAsync(new FuncTask<int, int>(Token, (s, n) =>
+                {
+                    runOrder.Add($"ran 3");
+                    return n * 2;
+                }))
+            ;
+            var ret = await act.StartAwait();
+            CollectionAssert.AreEqual(new string[] { "ran 1", "ran 2", "ran 3" }, runOrder);
+            Assert.AreEqual(20, ret);
+        }
+
+        [Test]
+        public async Task Inlining()
+        {
+            var runOrder = new List<string>();
+            var act = new ActionTask(Token, _ => runOrder.Add($"started"))
+                .ThenAsync(TaskEx.FromResult(1), TaskAffinity.Exclusive)
+                .Then((_, n) => n + 1)
+                .Then((_, n) => runOrder.Add(n.ToString()))
+                .ThenAsync(TaskEx.FromResult(20f), TaskAffinity.Exclusive)
+                .Then((_, n) => n + 1)
+                .Then((_, n) => runOrder.Add(n.ToString()))
+                .Finally((_, t) => runOrder.Add("done"))
+            ;
+            await act.StartAwait();
+            CollectionAssert.AreEqual(new string[] { "started", "2", "21", "done"}, runOrder);
         }
     }
 

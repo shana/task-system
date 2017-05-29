@@ -54,6 +54,9 @@ namespace GitHub.Unity
         protected Exception previousException;
         protected object previousResult;
 
+        private TaskBase continuation;
+        private bool continuationAlways;
+
         public TaskBase(CancellationToken token, ITask dependsOn = null, bool always = false)
         {
             Guard.ArgumentNotNull(token, "token");
@@ -81,11 +84,9 @@ namespace GitHub.Unity
             where T : ITask
         {
             Guard.ArgumentNotNull(continuation, "continuation");
-
             continuation.SetDependsOn(this);
-            Task.ContinueWith(_ => continuation.Start(), Token,
-                always ? runAlwaysOptions : runOnSuccessOptions,
-                TaskManager.GetScheduler(continuation.Affinity));
+            this.continuation = (TaskBase)(object)continuation;
+            this.continuationAlways = always;
             return continuation;
         }
 
@@ -107,8 +108,33 @@ namespace GitHub.Unity
 
         public virtual ITask Start()
         {
-            TaskManager.Instance.Schedule(this);
-            return this;
+            var depends = GetFirstDepends();
+            if (depends != null)
+            {
+                depends.Run();
+                return this;
+            }
+            else
+            {
+                return TaskManager.Instance.Schedule(this);
+            }
+        }
+
+        protected void Run()
+        {
+            if (Task.Status == TaskStatus.Created)
+            {
+                TaskManager.Instance.Schedule(this);
+            }
+            else
+            {
+                if (continuation != null)
+                {
+                    Task.ContinueWith(_ => ((TaskBase)(object)continuation).Run(), Token,
+                    continuationAlways ? runAlwaysOptions : runOnSuccessOptions,
+                    TaskManager.GetScheduler(continuation.Affinity));
+                }
+            }
         }
 
         protected void Start(Task task)
@@ -120,12 +146,36 @@ namespace GitHub.Unity
 
         public virtual ITask Start(TaskScheduler scheduler)
         {
-            var depends = DependsOn;
-            if (depends != null && depends.Task.Status == TaskStatus.Created)
-                depends.Start();
-            else
+            if (Task.Status == TaskStatus.Created)
+            {
+                Logger.Trace(String.Format($"Starting {Affinity} {Task.Id} {Name}"));
                 Task.Start(scheduler);
+            }
+
+            if (continuation != null)
+            {
+                Task.ContinueWith(_ => ((TaskBase)(object)continuation).Run(), Token,
+                    continuationAlways ? runAlwaysOptions : runOnSuccessOptions,
+                    TaskManager.GetScheduler(continuation.Affinity));
+            }
             return this;
+        }
+
+        protected TaskBase GetFirstDepends()
+        {
+            var depends = DependsOn;
+            if (depends == null)
+                return null;
+            return depends.GetFirstDepends(null);
+        }
+
+        protected TaskBase GetFirstDepends(TaskBase ret)
+        {
+            ret = (Task.Status == TaskStatus.Created ? this : ret);
+            var depends = DependsOn;
+            if (depends == null)
+                return ret;
+            return depends.GetFirstDepends(ret);
         }
 
         public virtual void Wait()
@@ -200,17 +250,13 @@ namespace GitHub.Unity
 
         public new ITask<TResult> Start()
         {
-            TaskManager.Instance.Schedule(this);
+            base.Start();
             return this;
         }
 
         public new ITask<TResult> Start(TaskScheduler scheduler)
         {
-            var depends = DependsOn;
-            if (depends != null && depends.Task.Status == TaskStatus.Created)
-                depends.Start();
-            else
-                Task.Start(scheduler);
+            base.Start(scheduler);
             return this;
         }
 
