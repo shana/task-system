@@ -48,7 +48,7 @@ namespace IntegrationTests
                 .Then((s, d) => output.Add(d))
                 .Finally((s, e) => success = s);
 
-            await task.Start().Task;
+            await task.StartAwait();
 
             Assert.IsFalse(success);
             CollectionAssert.AreEqual(expectedOutput, output);
@@ -171,7 +171,7 @@ namespace IntegrationTests
             var rand = new Randomizer(seed);
 
             var uiThread = 0;
-            await new ActionTask(Token, _ => uiThread = Thread.CurrentThread.ManagedThreadId) { Affinity = TaskAffinity.UI }.Start().Task;
+            await new ActionTask(Token, _ => uiThread = Thread.CurrentThread.ManagedThreadId) { Affinity = TaskAffinity.UI }.StartAwait();
 
             for (int i = 1; i < 100; i++)
             {
@@ -194,7 +194,7 @@ namespace IntegrationTests
             var rand = new Randomizer(seed);
 
             var uiThread = 0;
-            await new ActionTask(Token, _ => uiThread = Thread.CurrentThread.ManagedThreadId) { Affinity = TaskAffinity.UI }.Start().Task;
+            await new ActionTask(Token, _ => uiThread = Thread.CurrentThread.ManagedThreadId) { Affinity = TaskAffinity.UI }.StartAwait();
 
             for (int i = 1; i < 100; i++)
             {
@@ -243,7 +243,7 @@ namespace IntegrationTests
                     finallyException = e;
                 });
 
-            await task.Start().Task;
+            await task.StartAwait();
 
             Assert.IsFalse(success);
             CollectionAssert.AreEqual(expectedOutput, output);
@@ -270,7 +270,7 @@ namespace IntegrationTests
                     finallyException = e;
                 });
 
-            await task.Start().Task;
+            await task.StartAwait();
 
             Assert.IsFalse(success);
             CollectionAssert.AreEqual(expectedOutput, output);
@@ -314,7 +314,7 @@ namespace IntegrationTests
                     }
                 });
 
-            await task.Start().Task;
+            await task.StartAwait();
 
             Assert.IsFalse(success);
             CollectionAssert.AreEqual(expectedOutput, output);
@@ -342,11 +342,46 @@ namespace IntegrationTests
                 .Finally((_, __) => { })
                 .Catch(ex => { Thread.Sleep(20); exception = ex; });
 
-            await task.Start().Task;
+            await task.StartAwait();
 
             Assert.IsFalse(success);
             CollectionAssert.AreEqual(expectedOutput, output);
             Assert.IsNull(exception);
+        }
+    }
+
+    [TestFixture]
+    class Exceptions : BaseTest
+    {
+        [Test]
+        public async Task StartAndEndAreAlwaysRaised()
+        {
+            var runOrder = new List<string>();
+            var task = new ActionTask(Token, _ => { throw new Exception(); })
+                .Finally((s, d) => { });
+            task.OnStart += _ => runOrder.Add("start");
+            task.OnEnd += _ => runOrder.Add("end");
+            await task.Start().Task;
+            CollectionAssert.AreEqual(new string[] { "start", "end" }, runOrder);
+        }
+
+        [Test]
+        [ExpectedException(typeof(InvalidOperationException))]
+        public async Task ExceptionPropagatesOutIfNoFinally()
+        {
+            var runOrder = new List<string>();
+            var task = new ActionTask(Token, _ => { throw new InvalidOperationException(); })
+                .Catch(_ => { });
+            await task.Start().Task;
+        }
+
+        [Test]
+        public async Task StartAwaitSafelyAwaits()
+        {
+            var runOrder = new List<string>();
+            var task = new ActionTask(Token, _ => { throw new InvalidOperationException(); })
+                .Catch(_ => { });
+            await task.StartAwait();
         }
     }
 

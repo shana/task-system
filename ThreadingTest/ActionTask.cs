@@ -33,14 +33,26 @@ namespace GitHub.Unity
             base.Run(success);
 
             RaiseOnStart();
-            Callback?.Invoke(success);
-            if (CallbackWithException != null)
+            Exception exception = null;
+            try
             {
-                Exception exception = GetThrownException();
-                exception = exception != null ? exception.InnerException : exception;
-                CallbackWithException?.Invoke(success, exception);
+                Callback?.Invoke(success);
+                if (CallbackWithException != null)
+                {
+                    Exception thrown = GetThrownException();
+                    thrown = thrown != null ? thrown.InnerException : thrown;
+                    CallbackWithException?.Invoke(success, thrown);
+                }
+            }
+            catch (Exception ex)
+            {
+                Errors = ex.Message;
+                exception = ex;
             }
             RaiseOnEnd();
+
+            if (exception != null)
+                throw exception;
         }
     }
 
@@ -62,8 +74,20 @@ namespace GitHub.Unity
             base.Run(success);
 
             RaiseOnStart();
-            Callback?.Invoke(success, previousResult);
+            Exception exception = null;
+            try
+            {
+                Callback?.Invoke(success, previousResult);
+            }
+            catch (Exception ex)
+            {
+                Errors = ex.Message;
+                exception = ex;
+            }
             RaiseOnEnd();
+
+            if (exception != null)
+                throw exception;
         }
     }
 
@@ -83,8 +107,20 @@ namespace GitHub.Unity
             T result = base.RunWithReturn(success);
 
             RaiseOnStart();
-            result = Callback(success);
+            Exception exception = null;
+            try
+            {
+                result = Callback(success);
+            }
+            catch (Exception ex)
+            {
+                Errors = ex.Message;
+                exception = ex;
+            }
             RaiseOnEnd();
+
+            if (exception != null)
+                throw exception;
 
             return result;
         }
@@ -104,9 +140,22 @@ namespace GitHub.Unity
         protected override TResult RunWithData(bool success, T previousResult)
         {
             var result = base.RunWithData(success, previousResult);
+
             RaiseOnStart();
-            result = Callback(success, previousResult);
+            Exception exception = null;
+            try
+            {
+                result = Callback(success, previousResult);
+            }
+            catch (Exception ex)
+            {
+                Errors = ex.Message;
+                exception = ex;
+            }
             RaiseOnEnd();
+
+            if (exception != null)
+                throw exception;
 
             return result;
         }
@@ -135,8 +184,21 @@ namespace GitHub.Unity
             var result = base.RunWithReturn(success);
 
             RaiseOnStart();
-            result = Callback(success);
+            Exception exception = null;
+            try
+            {
+                result = Callback(success);
+            }
+            catch (Exception ex)
+            {
+                Errors = ex.Message;
+                exception = ex;
+            }
             RaiseOnEnd();
+
+            if (exception != null)
+                throw exception;
+
             if (result == null)
                 result = new List<T>();
 
@@ -160,8 +222,20 @@ namespace GitHub.Unity
             var result = base.RunWithData(success, previousResult);
 
             RaiseOnStart();
-            result = Callback(success, previousResult);
+            Exception exception = null;
+            try
+            {
+                result = Callback(success, previousResult);
+            }
+            catch (Exception ex)
+            {
+                Errors = ex.Message;
+                exception = ex;
+            }
             RaiseOnEnd();
+
+            if (exception != null)
+                throw exception;
 
             return result;
         }

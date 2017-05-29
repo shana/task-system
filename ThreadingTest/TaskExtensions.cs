@@ -11,6 +11,59 @@ namespace GitHub.Unity
         {
         }
 
+        public static async Task SafeAwait(this Task source, Action<Exception> handler = null)
+        {
+            try
+            {
+                await source;
+            }
+            catch (Exception ex)
+            {
+                if (handler != null)
+                    handler(ex);
+            }
+        }
+
+        public static async Task<T> SafeAwait<T>(this Task<T> source, Func<Exception, T> handler = null)
+        {
+            try
+            {
+                return await source;
+            }
+            catch (Exception ex)
+            {
+                if (handler != null)
+                    return handler(ex);
+                return default(T);
+            }
+        }
+
+        public static async Task StartAwait(this ITask source, Action<Exception> handler = null)
+        {
+            try
+            {
+                await source.Start().Task;
+            }
+            catch (Exception ex)
+            {
+                if (handler != null)
+                    handler(ex);
+            }
+        }
+
+        public static async Task<T> StartAwait<T>(this ITask<T> source, Func<Exception, T> handler = null)
+        {
+            try
+            {
+                return await source.Start().Task;
+            }
+            catch (Exception ex)
+            {
+                if (handler != null)
+                    return handler(ex);
+                return default(T);
+            }
+        }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA1801:ReviewUnusedParameters", MessageId = "task")]
         public static void Forget(this ITask task)

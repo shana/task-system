@@ -28,6 +28,7 @@ namespace GitHub.Unity
 
     interface ITask<TResult> : ITask
     {
+        new ITask<TResult> Start();
         new ITask<TResult> Start(TaskScheduler scheduler);
         TResult Result { get; }
         new Task<TResult> Task { get; }
