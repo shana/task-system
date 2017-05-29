@@ -69,7 +69,7 @@ namespace GitHub.Unity
                 Token, TaskCreationOptions.None);
         }
 
-        public ActionTask(Task<T> task)
+        public ActionTask(Task task)
             : base(task)
         {}
 
@@ -106,6 +106,10 @@ namespace GitHub.Unity
             this.Callback = action;
         }
 
+        public FuncTask(Task<T> task)
+            : base(task)
+        {}
+
         protected override T RunWithReturn(bool success)
         {
             T result = base.RunWithReturn(success);
@@ -141,6 +145,10 @@ namespace GitHub.Unity
             this.Callback = action;
         }
 
+        public FuncTask(Task<TResult> task)
+            : base(task)
+        {}
+
         protected override TResult RunWithData(bool success, T previousResult)
         {
             var result = base.RunWithData(success, previousResult);
@@ -165,7 +173,7 @@ namespace GitHub.Unity
         }
     }
 
-    class FuncListTask<T> : ListTaskBase<List<T>, T>
+    class FuncListTask<T> : DataTaskBase<T, List<T>>
     {
         protected Func<bool, List<T>> Callback { get; }
 
@@ -182,6 +190,10 @@ namespace GitHub.Unity
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
         }
+
+        public FuncListTask(Task<List<T>> task)
+            : base(task)
+        {}
 
         protected override List<T> RunWithReturn(bool success)
         {
@@ -210,18 +222,22 @@ namespace GitHub.Unity
         }
     }
 
-    class FuncListTask<TDependentResult, TResult, TData> : ListTaskBase<TDependentResult, TResult, TData>
+    class FuncListTask<T, TData, TResult> : DataTaskBase<T, TData, List<TResult>>
     {
-        protected Func<bool, TDependentResult, TResult> Callback { get; }
+        protected Func<bool, T, List<TResult>> Callback { get; }
 
-        public FuncListTask(CancellationToken token, Func<bool, TDependentResult, TResult> action, ITask<TDependentResult> dependsOn)
+        public FuncListTask(CancellationToken token, Func<bool, T, List<TResult>> action, ITask<T> dependsOn)
             : base(token, dependsOn)
         {
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
         }
 
-        protected override TResult RunWithData(bool success, TDependentResult previousResult)
+        public FuncListTask(Task<List<TResult>> task)
+            : base(task)
+        {}
+
+        protected override List<TResult> RunWithData(bool success, T previousResult)
         {
             var result = base.RunWithData(success, previousResult);
 

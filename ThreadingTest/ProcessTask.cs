@@ -43,9 +43,9 @@ namespace GitHub.Unity
         void Configure(ProcessStartInfo psi, IOutputProcessor<T> processor);
     }
 
-    interface IProcessTask<T, TData> : ITask<T, TData>, IProcess
+    interface IProcessTask<TData, T> : ITask<TData, T>, IProcess
     {
-        void Configure(ProcessStartInfo psi, IOutputProcessor<T, TData> processor);
+        void Configure(ProcessStartInfo psi, IOutputProcessor<TData, T> processor);
     }
 
     class ProcessWrapper
@@ -322,9 +322,9 @@ namespace GitHub.Unity
         public virtual string ProcessArguments { get; }
     }
 
-    class ProcessTaskWithListOutput<T> : ListTaskBase<List<T>, T>, ITask<List<T>, T>, IProcessTask<List<T>, T>
+    class ProcessTaskWithListOutput<T> : DataTaskBase<T, List<T>>, IProcessTask<T, List<T>>
     {
-        private IOutputProcessor<List<T>, T> outputProcessor;
+        private IOutputProcessor<T, List<T>> outputProcessor;
         private Exception thrownException = null;
         private ProcessWrapper wrapper;
 
@@ -337,7 +337,7 @@ namespace GitHub.Unity
         {
         }
 
-        public ProcessTaskWithListOutput(CancellationToken token, IOutputProcessor<List<T>, T> outputProcessor)
+        public ProcessTaskWithListOutput(CancellationToken token, IOutputProcessor<T, List<T>> outputProcessor)
             : this(token)
         {
             this.outputProcessor = outputProcessor;
@@ -348,7 +348,7 @@ namespace GitHub.Unity
         {
         }
 
-        public ProcessTaskWithListOutput(CancellationToken token, IOutputProcessor<List<T>, T> outputProcessor, ITask dependsOn)
+        public ProcessTaskWithListOutput(CancellationToken token, IOutputProcessor<T, List<T>> outputProcessor, ITask dependsOn)
             : base(token, dependsOn)
         {
             this.outputProcessor = outputProcessor;
@@ -372,7 +372,7 @@ namespace GitHub.Unity
             ProcessName = existingProcess.StartInfo.FileName;
         }
 
-        public virtual void Configure(ProcessStartInfo psi, IOutputProcessor<List<T>, T> processor)
+        public virtual void Configure(ProcessStartInfo psi, IOutputProcessor<T, List<T>> processor)
         {
             Guard.ArgumentNotNull(psi, "psi");
             Guard.ArgumentNotNull(processor, "processor");

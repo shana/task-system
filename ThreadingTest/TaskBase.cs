@@ -36,7 +36,7 @@ namespace GitHub.Unity
         new event Action<ITask<TResult>> OnEnd;
     }
 
-    interface ITask<T, TData> : ITask<T>
+    interface ITask<TData, T> : ITask<T>
     {
         event Action<TData> OnData;
     }
@@ -67,6 +67,9 @@ namespace GitHub.Unity
         {
             Task = task;
         }
+
+        protected TaskBase()
+        {}
 
         public ITask SetDependsOn(ITask dependsOn)
         {
@@ -191,8 +194,9 @@ namespace GitHub.Unity
         }
 
         public TaskBase(Task<TResult> task)
-            : base(task)
-        {}
+        {
+            Task = task;
+        }
 
         public new ITask<TResult> Start()
         {
@@ -235,6 +239,10 @@ namespace GitHub.Unity
                 Token, TaskCreationOptions.None);
         }
 
+        public TaskBase(Task<TResult> task)
+            : base(task)
+        {}
+
         protected virtual TResult RunWithData(bool success, T previousResult)
         {
             base.Run(success);
@@ -242,10 +250,14 @@ namespace GitHub.Unity
         }
     }
 
-    abstract class ListTaskBase<TResult, TData> : TaskBase<TResult>, ITask<TResult, TData>
+    abstract class DataTaskBase<TData, TResult> : TaskBase<TResult>, ITask<TData, TResult>
     {
-        public ListTaskBase(CancellationToken token, ITask dependsOn = null, bool always = false)
+        public DataTaskBase(CancellationToken token, ITask dependsOn = null, bool always = false)
             : base(token, dependsOn, always) { }
+
+        public DataTaskBase(Task<TResult> task)
+            : base(task)
+        {}
 
         public event Action<TData> OnData;
         protected void RaiseOnData(TData data)
@@ -254,10 +266,14 @@ namespace GitHub.Unity
         }
     }
 
-    abstract class ListTaskBase<T, TResult, TData> : TaskBase<T, TResult>, ITask<TResult, TData>
+    abstract class DataTaskBase<T, TData, TResult> : TaskBase<T, TResult>, ITask<TData, TResult>
     {
-        public ListTaskBase(CancellationToken token, ITask<T> dependsOn = null, bool always = false)
-            : base(token, dependsOn, always) { }
+        public DataTaskBase(CancellationToken token, ITask<T> dependsOn = null, bool always = false)
+            : base(token, dependsOn, always) {}
+
+        public DataTaskBase(Task<TResult> task)
+            : base(task)
+        {}
 
         public event Action<TData> OnData;
         protected void RaiseOnData(TData data)
