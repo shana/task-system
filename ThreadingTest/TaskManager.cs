@@ -106,7 +106,6 @@ namespace GitHub.Unity
                     TaskContinuationOptions.OnlyOnFaulted, ConcurrentScheduler
                 );
             }
-            logger.Trace(String.Format("Schedule {0} {1}", "UI", task.Task.Id));
             return (T)task.Start(UIScheduler);
         }
 
@@ -129,7 +128,6 @@ namespace GitHub.Unity
                     TaskContinuationOptions.OnlyOnFaulted, ConcurrentScheduler
                 );
             }
-            logger.Trace(String.Format("Schedule {0} {1}", "Exclusive", task.Task.Id));
             return (T)task.Start(manager.ExclusiveTaskScheduler);
         }
 
@@ -152,7 +150,6 @@ namespace GitHub.Unity
                     TaskContinuationOptions.OnlyOnFaulted, ConcurrentScheduler
                 );
             }
-            logger.Trace(String.Format("Schedule {0} {1}", "Concurrent", task.Task.Id));
             return (T)task.Start(manager.ConcurrentTaskScheduler);
         }
     }
