@@ -25,7 +25,14 @@ namespace GitHub.Unity
         public void Error(Exception innerException, string msg)
         {
             msg = String.Format("{0} {1}", msg, innerException);
-            Console.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
+            Console.Error.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
+        }
+
+        public void Error(string msg, params object[] args)
+        {
+            if (args != null)
+                msg = string.Format(msg, args);
+            Console.Error.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
         }
 
         public void Debug(string msg, params object[] args)
@@ -42,11 +49,10 @@ namespace GitHub.Unity
             //Console.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
         }
 
-        public void Error(string msg, params object[] args)
+        public void Trace(Exception innerException, string msg)
         {
-            if (args != null)
-                msg = string.Format(msg, args);
-            Console.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
+            msg = String.Format("{0} {1}", msg, innerException);
+            //Console.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
         }
     }
 }

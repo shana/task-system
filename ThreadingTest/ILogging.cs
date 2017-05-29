@@ -8,5 +8,6 @@ namespace GitHub.Unity
         void Error(string msg, params object[] args);
         void Debug(string msg, params object[] args);
         void Trace(string msg, params object[] args);
+        void Trace(Exception innerException, string msg);
     }
 }
