@@ -71,7 +71,11 @@ namespace GitHub.Unity
                 long waitTime = (current + ticksPerFrame - lastTime) / TimeSpan.TicksPerMillisecond;
                 if (waitTime > 0 && waitTime < int.MaxValue)
                 {
-                    wait.Wait((int)waitTime, token);
+                    try
+                    {
+                        wait.Wait((int)waitTime, token);
+                    }
+                    catch {}
                 }
             }
         }
@@ -85,6 +89,7 @@ namespace GitHub.Unity
             }
             if (queue.TryDequeue(out data))
             {
+                Logging.GetLogger<ThreadSynchronizationContext>().Trace($"Running {data.Id} on main thread");
                 data.Run();
             }
         }
