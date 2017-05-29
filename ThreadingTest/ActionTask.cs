@@ -15,6 +15,7 @@ namespace GitHub.Unity
         {
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
+            Name = "ActionTask";
         }
 
         public ActionTask(CancellationToken token, Action<bool, Exception> action, ITask dependsOn = null, bool always = false)
@@ -22,11 +23,14 @@ namespace GitHub.Unity
         {
             Guard.ArgumentNotNull(action, "action");
             this.CallbackWithException = action;
+            Name = "ActionTask<Exception>";
         }
 
         public ActionTask(Task task)
             : base(task)
-        {}
+        {
+            Name = "ActionTask(Task)";
+        }
 
         protected override void Run(bool success)
         {
@@ -67,11 +71,14 @@ namespace GitHub.Unity
             this.Callback = action;
             Task = new Task(() => Run(DependsOn.Successful, DependsOn.Successful ? ((ITask<T>)DependsOn).Result : default(T)),
                 Token, TaskCreationOptions.None);
+            Name = $"ActionTask<{typeof(T)}>";
         }
 
         public ActionTask(Task task)
             : base(task)
-        {}
+        {
+            Name = $"ActionTask<{typeof(T)}>(Task)";
+        }
 
         protected virtual void Run(bool success, T previousResult)
         {
@@ -104,11 +111,14 @@ namespace GitHub.Unity
         {
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
+            Name = $"FuncTask<{typeof(T)}>";
         }
 
         public FuncTask(Task<T> task)
             : base(task)
-        {}
+        {
+            Name = $"FuncTask<{typeof(T)}>(Task)";
+        }
 
         protected override T RunWithReturn(bool success)
         {
@@ -143,11 +153,14 @@ namespace GitHub.Unity
         {
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
+            Name = $"FuncTask<{typeof(T)}, {typeof(TResult)}>";
         }
 
         public FuncTask(Task<TResult> task)
             : base(task)
-        {}
+        {
+            Name = $"FuncTask<{typeof(T)}, {typeof(TResult)}>(Task)";
+        }
 
         protected override TResult RunWithData(bool success, T previousResult)
         {

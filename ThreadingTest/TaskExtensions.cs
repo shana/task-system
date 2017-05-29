@@ -136,25 +136,42 @@ namespace GitHub.Unity
         public static ActionTask<T> Then<T>(this ITask<T> task, Action<bool, T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
         {
             Guard.ArgumentNotNull(continuation, "continuation");
-            return new ActionTask<T>(task.Token, continuation, task, always) { Affinity = affinity, Name = "Then" };
+            return new ActionTask<T>(task.Token, continuation, task, always) { Affinity = affinity, Name = $"Then<{typeof(T)}>" };
         }
 
         public static FuncTask<TResult, T> Then<TResult, T>(this ITask<TResult> task, Func<bool, TResult, T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
         {
             Guard.ArgumentNotNull(continuation, "continuation");
-            return new FuncTask<TResult, T>(task.Token, continuation, task) { Affinity = affinity, Name = "FuncTask Then" };
+            return new FuncTask<TResult, T>(task.Token, continuation, task) { Affinity = affinity, Name = $"Then<{typeof(TResult)}, {typeof(T)}>" };
         }
 
         public static ActionTask<T> ThenInUI<T>(this ITask<T> task, Action<bool, T> continuation, bool always = false)
         {
             Guard.ArgumentNotNull(continuation, "continuation");
-            return new ActionTask<T>(task.Token, continuation, task) { Affinity = TaskAffinity.UI };
+            return new ActionTask<T>(task.Token, continuation, task) { Affinity = TaskAffinity.UI, Name = $"ThenInUI<{typeof(T)}>" };
         }
 
         public static FuncTask<TResult, T> ThenInUI<TResult, T>(this ITask<TResult> task, Func<bool, TResult, T> continuation, bool always = false)
         {
             Guard.ArgumentNotNull(continuation, "continuation");
-            return new FuncTask<TResult, T>(task.Token, continuation, task) { Affinity = TaskAffinity.UI };
+            return new FuncTask<TResult, T>(task.Token, continuation, task) { Affinity = TaskAffinity.UI, Name = $"ThenInUI<{typeof(TResult)}, {typeof(T)}>" };
+        }
+
+        public static FuncTask<T> Then<T>(this ITask task, Func<bool, T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            return new FuncTask<T>(task.Token, continuation, task) { Affinity = affinity, Name = $"Then<{typeof(T)}>" };
+        }
+
+        public static ITask<T> ThenAsync<T>(this ITask task, Task<T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
+        {
+            var cont = new FuncTask<T>(continuation) { Affinity = affinity, Name = $"ThenAsync<{typeof(T)}>" };
+            return task.Then(cont, always);
+        }
+
+        public static ITask<T> ThenAsync<T>(this ITask task, ITask<T> continuation, bool always = false)
+        {
+            return task.Then(continuation, always);
         }
     }
 }
