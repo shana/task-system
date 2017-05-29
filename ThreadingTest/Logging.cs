@@ -39,7 +39,7 @@ namespace GitHub.Unity
         {
             if (args != null)
                 msg = string.Format(msg, args);
-            Console.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
+            //Console.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
         }
 
         public void Error(string msg, params object[] args)

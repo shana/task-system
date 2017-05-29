@@ -6,7 +6,7 @@ namespace GitHub.Unity
 {
     class TaskManager : ITaskManager
     {
-        private static readonly ILogging logger = Logging.GetLogger<ProcessManager>();
+        private static readonly ILogging logger = Logging.GetLogger<TaskManager>();
 
         private readonly CancellationTokenSource cts;
         private readonly ConcurrentExclusiveInterleave manager;
@@ -99,11 +99,11 @@ namespace GitHub.Unity
             if (setupFaultHandler)
             {
                 task.Task.ContinueWith(tt =>
-                {
-                    logger.Error(tt.Exception.InnerException, String.Format("Exception on ui thread: {0} {1}", tt.Id, task.Name));
-                },
+                    {
+                        logger.Error(tt.Exception.InnerException, String.Format("Exception on ui thread: {0} {1}", tt.Id, task.Name));
+                    },
                     cts.Token,
-                    TaskContinuationOptions.OnlyOnFaulted, UIScheduler
+                    TaskContinuationOptions.OnlyOnFaulted, ConcurrentScheduler
                 );
             }
             logger.Trace(String.Format("Schedule {0} {1}", "UI", task.Task.Id));
@@ -122,11 +122,11 @@ namespace GitHub.Unity
             if (setupFaultHandler)
             {
                 task.Task.ContinueWith(tt =>
-                {
-                    logger.Error(tt.Exception.InnerException, String.Format("Exception on exclusive thread: {0} {1}", tt.Id, task.Name));
-                },
+                    {
+                        logger.Error(tt.Exception.InnerException, String.Format("Exception on exclusive thread: {0} {1}", tt.Id, task.Name));
+                    },
                     cts.Token,
-                    TaskContinuationOptions.OnlyOnFaulted, UIScheduler
+                    TaskContinuationOptions.OnlyOnFaulted, ConcurrentScheduler
                 );
             }
             logger.Trace(String.Format("Schedule {0} {1}", "Exclusive", task.Task.Id));
@@ -145,11 +145,11 @@ namespace GitHub.Unity
             if (setupFaultHandler)
             {
                 task.Task.ContinueWith(tt =>
-                {
-                    logger.Error(tt.Exception.InnerException, String.Format("Exception on concurrent thread: {0} {1}", tt.Id, task.Name));
-                },
+                    {
+                        logger.Error(tt.Exception.InnerException, String.Format("Exception on concurrent thread: {0} {1}", tt.Id, task.Name));
+                    },
                     cts.Token,
-                    TaskContinuationOptions.OnlyOnFaulted, UIScheduler
+                    TaskContinuationOptions.OnlyOnFaulted, ConcurrentScheduler
                 );
             }
             logger.Trace(String.Format("Schedule {0} {1}", "Concurrent", task.Task.Id));

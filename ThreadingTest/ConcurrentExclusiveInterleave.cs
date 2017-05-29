@@ -15,8 +15,8 @@ namespace GitHub.Unity
         static TaskSchedulerExcludingThread()
         {
             executeEntryMethod = typeof(Task).GetMethod("ExecuteEntry", BindingFlags.NonPublic | BindingFlags.Instance);
-
         }
+
         public TaskSchedulerExcludingThread(int threadToExclude)
         {
             ThreadToExclude = threadToExclude;

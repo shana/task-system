@@ -11,10 +11,10 @@ namespace GitHub.Unity
 {
     static class ProcessTaskExtensions
     {
-        public static T ConfigureGitProcess<T>(this T task, IProcessManager processManager, bool withInput = false)
+        public static T Configure<T>(this T task, IProcessManager processManager, bool withInput = false)
             where T : IProcess
         {
-            return processManager.ConfigureGitProcess(task, withInput);
+            return processManager.Configure(task, withInput);
         }
 
         public static T Configure<T>(this T task, IProcessManager processManager, string executable, string arguments, string workingDirectory, bool withInput)
@@ -192,7 +192,6 @@ namespace GitHub.Unity
         public event Action<IProcess> OnStartProcess;
         public event Action<IProcess> OnEndProcess;
 
-        private string errors = null;
         private Exception thrownException = null;
 
         public ProcessTask(CancellationToken token)
@@ -281,21 +280,16 @@ namespace GitHub.Unity
 
         protected override T RunWithReturn(bool success)
         {
-            if (!success)
-            {
-                throw DependsOn.Task.Exception.InnerException;
-            }
-
-            Logger.Debug(String.Format("Executing id:{0}", Task.Id));
+            var result = base.RunWithReturn(success);
 
             wrapper = new ProcessWrapper(Process, outputProcessor,
                 RaiseOnStart,
                 () =>
                 {
                     RaiseOnEnd();
-                    if (errors != null)
+                    if (Errors != null)
                     {
-                        OnErrorData?.Invoke(errors);
+                        OnErrorData?.Invoke(Errors);
                         if (thrownException == null)
                             throw new ProcessException(this);
                         else
@@ -305,17 +299,19 @@ namespace GitHub.Unity
                 (ex, error) =>
                 {
                     thrownException = ex;
-                    errors = error;
+                    Errors = error;
                 },
                 Token);
 
             wrapper.Run();
 
             if (outputProcessor != null)
-                return outputProcessor.Result;
-            if (typeof(T) == typeof(string))
-                return (T)(object)(Process.StartInfo.CreateNoWindow ? "Process finished" : "Process running");
-            return default(T);
+                result = outputProcessor.Result;
+           
+            if (result == null && typeof(T) == typeof(string))
+                result = (T)(object)(Process.StartInfo.CreateNoWindow ? "Process finished" : "Process running");
+
+            return result;
         }
 
         public Process Process { get; set; }
@@ -329,7 +325,6 @@ namespace GitHub.Unity
     class ProcessTaskWithListOutput<T> : ListTaskBase<List<T>, T>, ITask<List<T>, T>, IProcessTask<List<T>, T>
     {
         private IOutputProcessor<List<T>, T> outputProcessor;
-        private string errors = null;
         private Exception thrownException = null;
         private ProcessWrapper wrapper;
 
@@ -411,21 +406,16 @@ namespace GitHub.Unity
 
         protected override List<T> RunWithReturn(bool success)
         {
-            if (!success)
-            {
-                throw DependsOn.Task.Exception.InnerException;
-            }
-
-            Logger.Debug(String.Format("Executing id:{0}", Task.Id));
+            var result = base.RunWithReturn(success);
 
             wrapper = new ProcessWrapper(Process, outputProcessor,
                 RaiseOnStart,
                 () =>
                 {
                     RaiseOnEnd();
-                    if (errors != null)
+                    if (Errors != null)
                     {
-                        OnErrorData?.Invoke(errors);
+                        OnErrorData?.Invoke(Errors);
                         if (thrownException == null)
                             throw new ProcessException(this);
                         else
@@ -435,14 +425,16 @@ namespace GitHub.Unity
                 (ex, error) =>
                 {
                     thrownException = ex;
-                    errors = error;
+                    Errors = error;
                 },
                 Token);
             wrapper.Run();
 
             if (outputProcessor != null)
-                return outputProcessor.Result;
-            return new List<T>();
+                result = outputProcessor.Result;
+            if (result == null)
+                result = new List<T>();
+            return result;
         }
 
         public Process Process { get; set; }
@@ -451,5 +443,21 @@ namespace GitHub.Unity
         public StreamWriter StandardInput { get { return wrapper?.Input; } }
         public virtual string ProcessName { get; protected set; }
         public virtual string ProcessArguments { get; }
+    }
+
+    class SimpleProcessTask : ProcessTask<string>
+    {
+        private readonly NPath fullPathToExecutable;
+        private readonly string arguments;
+
+        public SimpleProcessTask(NPath fullPathToExecutable, string arguments, CancellationToken token)
+            : base(token, new FirstNonNullLineOutputProcessor())
+        {
+            this.fullPathToExecutable = fullPathToExecutable;
+            this.arguments = arguments;
+        }
+
+        public override string ProcessName => fullPathToExecutable.FileName;
+        public override string ProcessArguments => arguments;
     }
 }

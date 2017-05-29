@@ -6,65 +6,11 @@ namespace GitHub.Unity
 {
     static class TaskExtensions
     {
-        public static async Task<T> Catch<T>(this Task<T> source, Func<Exception, T> handler = null)
-        {
-            try
-            {
-                return await source;
-            }
-            catch (Exception ex)
-            {
-                if (handler != null)
-                    return handler(ex);
-                return default(T);
-            }
-        }
-
-        public static async Task Catch(this Task source, Action<Exception> handler = null)
-        {
-            try
-            {
-                await source;
-            }
-            catch (Exception ex)
-            {
-                if (handler != null)
-                    handler(ex);
-            }
-        }
-
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA1801:ReviewUnusedParameters", MessageId = "task")]
         public static void Forget(this Task task)
         {
         }
 
-        public static async Task<ITask<T>> Catch<T>(this ITask<T> source, Func<ITask<T>, Exception, ITask<T>> handler = null)
-        {
-            try
-            {
-                await source.Task;
-            }
-            catch (Exception ex)
-            {
-                if (handler != null)
-                    return handler(source, ex);
-            }
-            return source;
-        }
-
-        public static async Task<ITask> Catch(this ITask source, Action<ITask, Exception> handler = null)
-        {
-            try
-            {
-                await source.Task;
-            }
-            catch (Exception ex)
-            {
-                if (handler != null)
-                    handler(source, ex);
-            }
-            return source;
-        }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA1801:ReviewUnusedParameters", MessageId = "task")]
         public static void Forget(this ITask task)
@@ -99,6 +45,56 @@ namespace GitHub.Unity
                     task.Dispose();
                 });
             };
+        }
+
+        public static T Catch<T>(this T task, Action<Exception> handler)
+        where T : ITask
+        {
+            Guard.ArgumentNotNull(handler, "handler");
+            task.Task.ContinueWith(t =>
+            {
+                handler(t.Exception is AggregateException ? t.Exception.InnerException : t.Exception);
+            },
+                task.Token,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskManager.GetScheduler(task.Affinity));
+            return task;
+        }
+
+        public static ITask Then(this ITask task, Action<bool> continuation, bool always = false)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            return new ActionTask(task.Token, continuation, task, always) { Name = "Then" };
+        }
+
+        public static ITask ThenInUI(this ITask task, Action<bool> continuation, bool always = false)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            return new ActionTask(task.Token, continuation, task, always) { Affinity = TaskAffinity.UI, Name = "ThenInUI" };
+        }
+
+        public static ActionTask<T> Then<T>(this ITask<T> task, Action<bool, T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            return new ActionTask<T>(task.Token, continuation, task, always) { Affinity = affinity, Name = "Then" };
+        }
+
+        public static FuncTask<TResult, T> Then<TResult, T>(this ITask<TResult> task, Func<bool, TResult, T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            return new FuncTask<TResult, T>(task.Token, continuation, task) { Affinity = affinity, Name = "FuncTask Then" };
+        }
+
+        public static ActionTask<T> ThenInUI<T>(this ITask<T> task, Action<bool, T> continuation, bool always = false)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            return new ActionTask<T>(task.Token, continuation, task) { Affinity = TaskAffinity.UI };
+        }
+
+        public static FuncTask<TResult, T> ThenInUI<TResult, T>(this ITask<TResult> task, Func<bool, TResult, T> continuation, bool always = false)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            return new FuncTask<TResult, T>(task.Token, continuation, task) { Affinity = TaskAffinity.UI };
         }
     }
 }

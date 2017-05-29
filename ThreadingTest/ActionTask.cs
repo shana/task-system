@@ -8,37 +8,39 @@ namespace GitHub.Unity
     class ActionTask : TaskBase
     {
         protected Action<bool> Callback { get; }
+        protected Action<bool, Exception> CallbackWithException { get; }
 
-        public ActionTask(CancellationToken token, Action<bool> action)
-            : base(token)
+        public ActionTask(CancellationToken token, Action<bool> action, ITask dependsOn = null, bool always = false)
+            : base(token, dependsOn, always)
         {
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
         }
 
-        public ActionTask(CancellationToken token, Action<bool> action, ITask dependsOn)
-            : base(token, dependsOn)
+        public ActionTask(CancellationToken token, Action<bool, Exception> action, ITask dependsOn = null, bool always = false)
+            : base(token, dependsOn, always)
         {
             Guard.ArgumentNotNull(action, "action");
-            this.Callback = action;
+            this.CallbackWithException = action;
         }
 
         public ActionTask(Task task)
             : base(task)
-        {
-
-        }
+        {}
 
         protected override void Run(bool success)
         {
-            Logger.Debug(String.Format("Executing id:{0} success?:{1}", Task.Id, success));
+            base.Run(success);
 
             RaiseOnStart();
             Callback?.Invoke(success);
+            if (CallbackWithException != null)
+            {
+                Exception exception = GetThrownException();
+                exception = exception != null ? exception.InnerException : exception;
+                CallbackWithException?.Invoke(success, exception);
+            }
             RaiseOnEnd();
-
-            if (!success)
-                throw DependsOn.Task.Exception.InnerException;
         }
     }
 
@@ -46,8 +48,8 @@ namespace GitHub.Unity
     {
         protected Action<bool, T> Callback { get; }
 
-        public ActionTask(CancellationToken token, Action<bool, T> action, ITask<T> dependsOn)
-            : base(token, dependsOn)
+        public ActionTask(CancellationToken token, Action<bool, T> action, ITask<T> dependsOn, bool always = false)
+            : base(token, dependsOn, always)
         {
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
@@ -55,21 +57,13 @@ namespace GitHub.Unity
                 Token, TaskCreationOptions.None);
         }
 
-        protected override void Run(bool success)
-        {
-            throw new NotImplementedException();
-        }
-
         protected virtual void Run(bool success, T previousResult)
         {
-            Logger.Debug(String.Format("Executing id:{0} success?:{1}", Task.Id, success));
+            base.Run(success);
 
             RaiseOnStart();
             Callback?.Invoke(success, previousResult);
             RaiseOnEnd();
-
-            if (!success)
-                throw DependsOn.Task.Exception.InnerException;
         }
     }
 
@@ -77,15 +71,8 @@ namespace GitHub.Unity
     {
         protected Func<bool, T> Callback { get; }
 
-        public FuncTask(CancellationToken token, Func<bool, T> action)
-            : base(token)
-        {
-            Guard.ArgumentNotNull(action, "action");
-            this.Callback = action;
-        }
-
-        public FuncTask(CancellationToken token, Func<bool, T> action, ITask dependsOn)
-            : base(token, dependsOn)
+        public FuncTask(CancellationToken token, Func<bool, T> action, ITask dependsOn = null, bool always = false)
+            : base(token, dependsOn, always)
         {
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
@@ -93,16 +80,11 @@ namespace GitHub.Unity
 
         protected override T RunWithReturn(bool success)
         {
-            Logger.Debug(String.Format("Executing id:{0} success?:{1}", Task.Id, success));
+            T result = base.RunWithReturn(success);
 
             RaiseOnStart();
-
-            T result = default(T);
             result = Callback(success);
             RaiseOnEnd();
-
-            if (!success)
-                throw DependsOn.Task.Exception.InnerException;
 
             return result;
         }
@@ -112,8 +94,8 @@ namespace GitHub.Unity
     {
         protected Func<bool, T, TResult> Callback { get; }
 
-        public FuncTask(CancellationToken token, Func<bool, T, TResult> action, ITask<T> dependsOn)
-            : base(token, dependsOn)
+        public FuncTask(CancellationToken token, Func<bool, T, TResult> action, ITask<T> dependsOn = null, bool always = false)
+            : base(token, dependsOn, always)
         {
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
@@ -121,14 +103,10 @@ namespace GitHub.Unity
 
         protected override TResult RunWithData(bool success, T previousResult)
         {
-            Logger.Debug(String.Format("Executing id:{0} success?:{1}", Task.Id, success));
-
+            var result = base.RunWithData(success, previousResult);
             RaiseOnStart();
-            var result = Callback(success, previousResult);
+            result = Callback(success, previousResult);
             RaiseOnEnd();
-
-            if (!success)
-                throw DependsOn.Task.Exception.InnerException;
 
             return result;
         }
@@ -154,18 +132,13 @@ namespace GitHub.Unity
 
         protected override List<T> RunWithReturn(bool success)
         {
-            Logger.Debug(String.Format("Executing id:{0} success?:{1}", Task.Id, success));
+            var result = base.RunWithReturn(success);
 
             RaiseOnStart();
-
-            List<T> result = null;
             result = Callback(success);
             RaiseOnEnd();
             if (result == null)
                 result = new List<T>();
-
-            if (!success)
-                throw DependsOn.Task.Exception.InnerException;
 
             return result;
         }
@@ -184,15 +157,11 @@ namespace GitHub.Unity
 
         protected override TResult RunWithData(bool success, TDependentResult previousResult)
         {
-            Logger.Debug(String.Format("Executing id:{0} success?:{1}", Task.Id, success));
+            var result = base.RunWithData(success, previousResult);
 
             RaiseOnStart();
-            TResult result = default(TResult);
             result = Callback(success, previousResult);
             RaiseOnEnd();
-
-            if (!success)
-                throw DependsOn.Task.Exception.InnerException;
 
             return result;
         }
