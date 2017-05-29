@@ -28,6 +28,7 @@ namespace GitHub.Unity
 
     interface ITask<TResult> : ITask
     {
+        ITask Finally(Action<bool, Exception, TResult> continuation, TaskAffinity affinity = TaskAffinity.Concurrent);
         new ITask<TResult> Start();
         new ITask<TResult> Start(TaskScheduler scheduler);
         TResult Result { get; }
@@ -98,7 +99,7 @@ namespace GitHub.Unity
             return ret;
         }
 
-        private void SetFaultHandler(ActionTask handler)
+        internal void SetFaultHandler(TaskBase handler)
         {
             Task.ContinueWith(t => handler.Start(t), Token,
                 TaskContinuationOptions.OnlyOnFaulted,
@@ -246,6 +247,14 @@ namespace GitHub.Unity
         public TaskBase(Task<TResult> task)
         {
             Task = task;
+        }
+
+        public ITask Finally(Action<bool, Exception, TResult> continuation, TaskAffinity affinity = TaskAffinity.Concurrent)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            var ret = new ActionTask<TResult>(Token, continuation, this, true) { Affinity = affinity, Name = "Finally" };
+            DependsOn?.SetFaultHandler(ret);
+            return ret;
         }
 
         public new ITask<TResult> Start()

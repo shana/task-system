@@ -63,6 +63,7 @@ namespace GitHub.Unity
     class ActionTask<T> : TaskBase
     {
         protected Action<bool, T> Callback { get; }
+        protected Action<bool, Exception, T> CallbackWithException { get; }
 
         public ActionTask(CancellationToken token, Action<bool, T> action, ITask<T> dependsOn, bool always = false)
             : base(token, dependsOn, always)
@@ -72,6 +73,16 @@ namespace GitHub.Unity
             Task = new Task(() => Run(DependsOn.Successful, DependsOn.Successful ? ((ITask<T>)DependsOn).Result : default(T)),
                 Token, TaskCreationOptions.None);
             Name = $"ActionTask<{typeof(T)}>";
+        }
+
+        public ActionTask(CancellationToken token, Action<bool, Exception, T> action, ITask<T> dependsOn, bool always = false)
+            : base(token, dependsOn, always)
+        {
+            Guard.ArgumentNotNull(action, "action");
+            this.CallbackWithException = action;
+            Task = new Task(() => Run(DependsOn.Successful, DependsOn.Successful ? ((ITask<T>)DependsOn).Result : default(T)),
+                Token, TaskCreationOptions.None);
+            Name = $"ActionTask<Exception, {typeof(T)}>";
         }
 
         public ActionTask(Task task)
@@ -89,6 +100,12 @@ namespace GitHub.Unity
             try
             {
                 Callback?.Invoke(success, previousResult);
+                if (CallbackWithException != null)
+                {
+                    Exception thrown = GetThrownException();
+                    thrown = thrown != null ? thrown.InnerException : thrown;
+                    CallbackWithException?.Invoke(success, thrown, previousResult);
+                }
             }
             catch (Exception ex)
             {
@@ -105,6 +122,7 @@ namespace GitHub.Unity
     class FuncTask<T> : TaskBase<T>
     {
         protected Func<bool, T> Callback { get; }
+        protected Func<bool, Exception, T> CallbackWithException { get; }
 
         public FuncTask(CancellationToken token, Func<bool, T> action, ITask dependsOn = null, bool always = false)
             : base(token, dependsOn, always)
@@ -112,6 +130,14 @@ namespace GitHub.Unity
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
             Name = $"FuncTask<{typeof(T)}>";
+        }
+
+        public FuncTask(CancellationToken token, Func<bool, Exception, T> action, ITask dependsOn = null, bool always = false)
+            : base(token, dependsOn, always)
+        {
+            Guard.ArgumentNotNull(action, "action");
+            this.CallbackWithException = action;
+            Name = $"FuncTask<Exception, {typeof(T)}>";
         }
 
         public FuncTask(Task<T> task)
@@ -128,7 +154,16 @@ namespace GitHub.Unity
             Exception exception = null;
             try
             {
-                result = Callback(success);
+                if (Callback != null)
+                {
+                    result = Callback(success);
+                }
+                else if (CallbackWithException != null)
+                {
+                    Exception thrown = GetThrownException();
+                    thrown = thrown != null ? thrown.InnerException : thrown;
+                    result = CallbackWithException(success, thrown);
+                }
             }
             catch (Exception ex)
             {
@@ -147,6 +182,7 @@ namespace GitHub.Unity
     class FuncTask<T, TResult> : TaskBase<T, TResult>
     {
         protected Func<bool, T, TResult> Callback { get; }
+        protected Func<bool, Exception, T, TResult> CallbackWithException { get; }
 
         public FuncTask(CancellationToken token, Func<bool, T, TResult> action, ITask<T> dependsOn = null, bool always = false)
             : base(token, dependsOn, always)
@@ -155,6 +191,15 @@ namespace GitHub.Unity
             this.Callback = action;
             Name = $"FuncTask<{typeof(T)}, {typeof(TResult)}>";
         }
+
+        public FuncTask(CancellationToken token, Func<bool, Exception, T, TResult> action, ITask<T> dependsOn = null, bool always = false)
+            : base(token, dependsOn, always)
+        {
+            Guard.ArgumentNotNull(action, "action");
+            this.CallbackWithException = action;
+            Name = $"FuncTask<{typeof(T)}, Exception, {typeof(TResult)}>";
+        }
+
 
         public FuncTask(Task<TResult> task)
             : base(task)
@@ -170,7 +215,16 @@ namespace GitHub.Unity
             Exception exception = null;
             try
             {
-                result = Callback(success, previousResult);
+                if (Callback != null)
+                {
+                    result = Callback(success, previousResult);
+                }
+                else if (CallbackWithException != null)
+                {
+                    Exception thrown = GetThrownException();
+                    thrown = thrown != null ? thrown.InnerException : thrown;
+                    result = CallbackWithException(success, thrown, previousResult);
+                }
             }
             catch (Exception ex)
             {
@@ -189,19 +243,20 @@ namespace GitHub.Unity
     class FuncListTask<T> : DataTaskBase<T, List<T>>
     {
         protected Func<bool, List<T>> Callback { get; }
+        protected Func<bool, Exception, List<T>> CallbackWithException { get; }
 
-        public FuncListTask(CancellationToken token, Func<bool, List<T>> action)
-            : base(token)
+        public FuncListTask(CancellationToken token, Func<bool, List<T>> action, ITask dependsOn = null, bool always = false)
+            : base(token, dependsOn, always)
         {
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
         }
 
-        public FuncListTask(CancellationToken token, Func<bool, List<T>> action, ITask dependsOn)
-            : base(token, dependsOn)
+        public FuncListTask(CancellationToken token, Func<bool, Exception, List<T>> action, ITask dependsOn = null, bool always = false)
+            : base(token, dependsOn, always)
         {
             Guard.ArgumentNotNull(action, "action");
-            this.Callback = action;
+            this.CallbackWithException = action;
         }
 
         public FuncListTask(Task<List<T>> task)
@@ -216,7 +271,16 @@ namespace GitHub.Unity
             Exception exception = null;
             try
             {
-                result = Callback(success);
+                if (Callback != null)
+                {
+                    result = Callback(success);
+                }
+                else if (CallbackWithException != null)
+                {
+                    Exception thrown = GetThrownException();
+                    thrown = thrown != null ? thrown.InnerException : thrown;
+                    result = CallbackWithException(success, thrown);
+                }
             }
             catch (Exception ex)
             {
@@ -238,12 +302,20 @@ namespace GitHub.Unity
     class FuncListTask<T, TData, TResult> : DataTaskBase<T, TData, List<TResult>>
     {
         protected Func<bool, T, List<TResult>> Callback { get; }
+        protected Func<bool, Exception, T, List<TResult>> CallbackWithException { get; }
 
-        public FuncListTask(CancellationToken token, Func<bool, T, List<TResult>> action, ITask<T> dependsOn)
-            : base(token, dependsOn)
+        public FuncListTask(CancellationToken token, Func<bool, T, List<TResult>> action, ITask<T> dependsOn = null, bool always = false)
+            : base(token, dependsOn, always)
         {
             Guard.ArgumentNotNull(action, "action");
             this.Callback = action;
+        }
+
+        public FuncListTask(CancellationToken token, Func<bool, Exception, T, List<TResult>> action, ITask<T> dependsOn = null, bool always = false)
+            : base(token, dependsOn, always)
+        {
+            Guard.ArgumentNotNull(action, "action");
+            this.CallbackWithException = action;
         }
 
         public FuncListTask(Task<List<TResult>> task)
@@ -258,7 +330,16 @@ namespace GitHub.Unity
             Exception exception = null;
             try
             {
-                result = Callback(success, previousResult);
+                if (Callback != null)
+                {
+                    result = Callback(success, previousResult);
+                }
+                else if (CallbackWithException != null)
+                {
+                    Exception thrown = GetThrownException();
+                    thrown = thrown != null ? thrown.InnerException : thrown;
+                    result = CallbackWithException(success, thrown, previousResult);
+                }
             }
             catch (Exception ex)
             {

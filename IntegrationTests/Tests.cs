@@ -299,7 +299,11 @@ namespace IntegrationTests
                 .Then((s, d) => output.Add(d))
                 .Then(_ => { throw new Exception("an exception"); })
                 .Then(new FuncTask<string>(Token, _ => "another name") { Affinity = TaskAffinity.Exclusive })
-                .Then((s, d) => output.Add(d))
+                .Then((s, d) =>
+                {
+                    output.Add(d);
+                    return "done";
+                })
                 .Catch(ex =>
                 {
                     Thread.Sleep(300);
@@ -309,7 +313,7 @@ namespace IntegrationTests
                         runOrder.Add("catch");
                     }
                 })
-                .Finally((s, e) =>
+                .Finally((s, e, d) =>
                 {
                     Thread.Sleep(300);
                     lock (runOrder)
@@ -353,6 +357,53 @@ namespace IntegrationTests
             Assert.IsFalse(success);
             CollectionAssert.AreEqual(expectedOutput, output);
             Assert.IsNull(exception);
+        }
+
+        [Test]
+        public async Task FinallyHasDataIfNoException()
+        {
+            var success = false;
+            Exception exception = null;
+            Exception finallyException = null;
+            var runOrder = new List<string>();
+            var output = new List<string>();
+            var expectedOutput = new List<string> { "one name", "another name", "done" };
+
+            var task =
+                new FuncTask<string>(Token, _ => "one name") { Affinity = TaskAffinity.UI }
+                .Then((s, d) => output.Add(d))
+                .Then(new FuncTask<string>(Token, _ => "another name") { Affinity = TaskAffinity.Exclusive })
+                .Then((s, d) =>
+                {
+                    output.Add(d);
+                    return "done";
+                })
+                .Catch(ex =>
+                {
+                    lock (runOrder)
+                    {
+                        exception = ex;
+                        runOrder.Add("catch");
+                    }
+                })
+                .Finally((s, e, d) =>
+                {
+                    lock (runOrder)
+                    {
+                        success = s;
+                        output.Add(d);
+                        finallyException = e;
+                        runOrder.Add("finally");
+                    }
+                });
+
+            await task.StartAwait();
+
+            Assert.IsTrue(success);
+            CollectionAssert.AreEqual(expectedOutput, output);
+            Assert.IsNull(exception);
+            Assert.IsNull(finallyException);
+            CollectionAssert.AreEqual(new List<string> { "finally" }, runOrder);
         }
     }
 
