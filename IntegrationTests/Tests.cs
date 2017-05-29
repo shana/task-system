@@ -385,6 +385,23 @@ namespace IntegrationTests
         }
     }
 
+    [TestFixture]
+    class TaskToActionTask : BaseTest
+    {
+        [Test]
+        public async Task CanWrapATask()
+        {
+            var uiThread = 0;
+            await new ActionTask(Token, _ => uiThread = Thread.CurrentThread.ManagedThreadId) { Affinity = TaskAffinity.UI }.StartAwait();
+
+            var runOrder = new List<string>();
+            var task = new Task(() => runOrder.Add($"ran {Thread.CurrentThread.ManagedThreadId}"));
+            var act = new ActionTask(task) { Affinity = TaskAffinity.UI };
+            await act.StartAwait();
+            CollectionAssert.AreEqual(new string[] { $"ran {uiThread}" }, runOrder);
+        }
+    }
+
     static class KeyValuePair
     {
         public static KeyValuePair<TKey, TValue> Create<TKey, TValue>(TKey key, TValue value)

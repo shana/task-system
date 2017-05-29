@@ -69,6 +69,10 @@ namespace GitHub.Unity
                 Token, TaskCreationOptions.None);
         }
 
+        public ActionTask(Task<T> task)
+            : base(task)
+        {}
+
         protected virtual void Run(bool success, T previousResult)
         {
             base.Run(success);

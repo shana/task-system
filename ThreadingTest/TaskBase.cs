@@ -190,6 +190,10 @@ namespace GitHub.Unity
             Task = new Task<TResult>(() => RunWithReturn(DependsOn?.Successful ?? previousSuccess), Token, TaskCreationOptions.None);
         }
 
+        public TaskBase(Task<TResult> task)
+            : base(task)
+        {}
+
         public new ITask<TResult> Start()
         {
             TaskManager.Instance.Schedule(this);
