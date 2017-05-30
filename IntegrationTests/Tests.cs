@@ -361,7 +361,7 @@ namespace IntegrationTests
         }
 
         [Test]
-        public async Task FinallyHasDataIfNoException()
+        public async Task FinallyCanReturnData()
         {
             var success = false;
             Exception exception = null;
@@ -399,8 +399,8 @@ namespace IntegrationTests
                     return d;
                 });
 
-            await task.StartAwait();
-
+            var ret = await task.StartAwait();
+            Assert.AreEqual("done", ret);
             Assert.IsTrue(success);
             CollectionAssert.AreEqual(expectedOutput, output);
             Assert.IsNull(exception);
@@ -455,6 +455,45 @@ namespace IntegrationTests
             CollectionAssert.AreEquivalent(expectedOutput, output);
             Assert.IsNull(exception);
             Assert.IsNull(finallyException);
+        }
+
+        [Test]
+        public async Task FinallyCanAlsoNotReturnData()
+        {
+            var success = false;
+            Exception exception = null;
+            Exception finallyException = null;
+            var runOrder = new List<string>();
+            var output = new List<string>();
+            var expectedOutput = new List<string> { "one name", "another name", "done" };
+
+            var task =
+                new FuncTask<string>(Token, _ => "one name") { Affinity = TaskAffinity.UI }
+                .Then((s, d) => output.Add(d))
+                .Then(new FuncTask<string>(Token, _ => "another name") { Affinity = TaskAffinity.Exclusive })
+                .Then((s, d) =>
+                {
+                    output.Add(d);
+                    return "done";
+                })
+                .Finally((s, e, d) =>
+                {
+                    lock (runOrder)
+                    {
+                        success = s;
+                        output.Add(d);
+                        finallyException = e;
+                        runOrder.Add("finally");
+                    }
+                });
+
+            await task.StartAwait();
+
+            Assert.IsTrue(success);
+            CollectionAssert.AreEqual(expectedOutput, output);
+            Assert.IsNull(exception);
+            Assert.IsNull(finallyException);
+            CollectionAssert.AreEqual(new List<string> { "finally" }, runOrder);
         }
     }
 

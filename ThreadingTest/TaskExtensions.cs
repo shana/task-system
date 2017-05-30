@@ -111,9 +111,9 @@ namespace GitHub.Unity
         {
             Guard.ArgumentNotNull(handler, "handler");
             task.Task.ContinueWith(t =>
-                {
-                    handler(t.Exception is AggregateException ? t.Exception.InnerException : t.Exception);
-                },
+            {
+                handler(t.Exception is AggregateException ? t.Exception.InnerException : t.Exception);
+            },
                 task.Token,
                 TaskContinuationOptions.OnlyOnFaulted,
                 TaskManager.GetScheduler(task.Affinity));
@@ -125,12 +125,6 @@ namespace GitHub.Unity
         {
             Guard.ArgumentNotNull(continuation, "continuation");
             return new ActionTask(task.Token, continuation, task, always) { Name = "Then" };
-        }
-
-        public static ITask ThenInUI(this ITask task, Action<bool> continuation, bool always = false)
-        {
-            Guard.ArgumentNotNull(continuation, "continuation");
-            return new ActionTask(task.Token, continuation, task, always) { Affinity = TaskAffinity.UI, Name = "ThenInUI" };
         }
 
         public static ActionTask<T> Then<T>(this ITask<T> task, Action<bool, T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
@@ -145,10 +139,15 @@ namespace GitHub.Unity
             return new FuncTask<TResult, T>(task.Token, continuation, task) { Affinity = affinity, Name = $"Then<{typeof(TResult)}, {typeof(T)}>" };
         }
 
-        public static ActionTask<T> ThenInUI<T>(this ITask<T> task, Action<bool, T> continuation, bool always = false)
+        public static FuncTask<T> Then<T>(this ITask task, Func<bool, T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
         {
             Guard.ArgumentNotNull(continuation, "continuation");
-            return new ActionTask<T>(task.Token, continuation, task) { Affinity = TaskAffinity.UI, Name = $"ThenInUI<{typeof(T)}>" };
+            return new FuncTask<T>(task.Token, continuation, task) { Affinity = affinity, Name = $"Then<{typeof(T)}>" };
+        }
+
+        public static ITask<T> ThenAsync<T>(this ITask task, ITask<T> continuation, bool always = false)
+        {
+            return task.Then(continuation, always);
         }
 
         public static FuncTask<TResult, T> ThenInUI<TResult, T>(this ITask<TResult> task, Func<bool, TResult, T> continuation, bool always = false)
@@ -157,21 +156,41 @@ namespace GitHub.Unity
             return new FuncTask<TResult, T>(task.Token, continuation, task) { Affinity = TaskAffinity.UI, Name = $"ThenInUI<{typeof(TResult)}, {typeof(T)}>" };
         }
 
-        public static FuncTask<T> Then<T>(this ITask task, Func<bool, T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
+        public static ActionTask<T> ThenInUI<T>(this ITask<T> task, Action<bool, T> continuation, bool always = false)
         {
             Guard.ArgumentNotNull(continuation, "continuation");
-            return new FuncTask<T>(task.Token, continuation, task) { Affinity = affinity, Name = $"Then<{typeof(T)}>" };
+            return new ActionTask<T>(task.Token, continuation, task) { Affinity = TaskAffinity.UI, Name = $"ThenInUI<{typeof(T)}>" };
+        }
+
+
+        public static ITask ThenInUI(this ITask task, ITask continuation)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            continuation.Affinity = TaskAffinity.UI;
+            return continuation;
+        }
+
+        public static ITask ThenInUI(this ITask task, Action<bool> continuation, bool always = false)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            return new ActionTask(task.Token, continuation, task, always) { Affinity = TaskAffinity.UI, Name = "ThenInUI" };
+        }
+
+        public static T FinallyInUI<T>(this T task, Action<bool, Exception> continuation)
+            where T : ITask
+        {
+            return (T)task.Finally(continuation, TaskAffinity.UI);
+        }
+
+        public static ITask<T> FinallyInUI<T>(this ITask<T> task, Func<bool, Exception, T, T> continuation)
+        {
+            return task.Finally(continuation, TaskAffinity.UI);
         }
 
         public static ITask<T> ThenAsync<T>(this ITask task, Task<T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
         {
             var cont = new FuncTask<T>(continuation) { Affinity = affinity, Name = $"ThenAsync<{typeof(T)}>" };
             return task.Then(cont, always);
-        }
-
-        public static ITask<T> ThenAsync<T>(this ITask task, ITask<T> continuation, bool always = false)
-        {
-            return task.Then(continuation, always);
         }
     }
 }

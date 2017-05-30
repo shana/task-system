@@ -7,7 +7,6 @@ namespace GitHub.Unity
     interface ITask : IAsyncResult
     {
         T Then<T>(T continuation, bool always = false) where T : ITask;
-        // Continues and also sends a flag indicating whether the current task was successful or not
         ITask Finally(Action<bool, Exception> continuation, TaskAffinity affinity = TaskAffinity.Concurrent);
         ITask SetDependsOn(ITask dependsOn);
         ITask Start();
@@ -19,7 +18,7 @@ namespace GitHub.Unity
         string Errors { get; }
         Task Task { get; }
         string Name { get; }
-        TaskAffinity Affinity { get; }
+        TaskAffinity Affinity { get; set; }
         CancellationToken Token { get; }
         TaskBase DependsOn { get; }
         event Action<ITask> OnStart;
@@ -73,7 +72,7 @@ namespace GitHub.Unity
         }
 
         protected TaskBase()
-        {}
+        { }
 
         public ITask SetDependsOn(ITask dependsOn)
         {
@@ -230,17 +229,12 @@ namespace GitHub.Unity
         public virtual bool Successful { get { return Task.Status == TaskStatus.RanToCompletion && Task.Status != TaskStatus.Faulted; } }
         public string Errors { get; protected set; }
         public Task Task { get; protected set; }
-
         public bool IsCompleted { get { return (Task as IAsyncResult).IsCompleted; } }
-
         public WaitHandle AsyncWaitHandle { get { return (Task as IAsyncResult).AsyncWaitHandle; } }
-
         public object AsyncState { get { return (Task as IAsyncResult).AsyncState; } }
-
         public bool CompletedSynchronously { get { return (Task as IAsyncResult).CompletedSynchronously; } }
         public virtual string Name { get; set; }
         public virtual TaskAffinity Affinity { get; set; }
-
         private ILogging logger;
         protected ILogging Logger { get { return logger = logger ?? Logging.GetLogger(GetType()); } }
         public TaskBase DependsOn { get; private set; }
@@ -307,6 +301,7 @@ namespace GitHub.Unity
             deferred = null;
             return base.Then<T>(continuation, always);
         }
+
         public ITask<T> ThenIf<T>(Func<TResult, ITask<T>> continueWith, bool always = false)
         {
             Guard.ArgumentNotNull(continueWith, "continueWith");
@@ -340,7 +335,7 @@ namespace GitHub.Unity
         {
             //if (deferred == null)
             //{
-                base.RunContinuation();
+            base.RunContinuation();
             //}
         }
 
@@ -376,7 +371,16 @@ namespace GitHub.Unity
 
         public TaskBase(Task<TResult> task)
             : base(task)
-        {}
+        { }
+
+        public ITask Finally(Action<bool, Exception, TResult> continuation, TaskAffinity affinity = TaskAffinity.Concurrent)
+        {
+            Guard.ArgumentNotNull(continuation, "continuation");
+            var ret = new ActionTask<TResult>(Token, continuation, this, true) { Affinity = affinity, Name = "Finally" };
+            ret.ContinuationIsFinally = true;
+            DependsOn?.SetFaultHandler(ret);
+            return ret;
+        }
 
         protected virtual TResult RunWithData(bool success, T previousResult)
         {
@@ -392,7 +396,7 @@ namespace GitHub.Unity
 
         public DataTaskBase(Task<TResult> task)
             : base(task)
-        {}
+        { }
 
         public event Action<TData> OnData;
         protected void RaiseOnData(TData data)
@@ -404,11 +408,11 @@ namespace GitHub.Unity
     abstract class DataTaskBase<T, TData, TResult> : TaskBase<T, TResult>, ITask<TData, TResult>
     {
         public DataTaskBase(CancellationToken token, ITask<T> dependsOn = null, bool always = false)
-            : base(token, dependsOn, always) {}
+            : base(token, dependsOn, always) { }
 
         public DataTaskBase(Task<TResult> task)
             : base(task)
-        {}
+        { }
 
         public event Action<TData> OnData;
         protected void RaiseOnData(TData data)
