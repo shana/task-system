@@ -28,6 +28,7 @@ namespace GitHub.Unity
             return "";
         }
         public string GitExecutablePath { get { return "git"; } set { } }
-        public string RepositoryPath { get { return AppDomain.CurrentDomain.BaseDirectory; } }
+        public IRepository Repository { get; set; }
+        public string RepositoryPath { get { return Repository.LocalPath; } }
     }
 }

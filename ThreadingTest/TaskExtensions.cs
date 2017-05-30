@@ -187,6 +187,11 @@ namespace GitHub.Unity
             return task.Finally(continuation, TaskAffinity.UI);
         }
 
+        public static ITask FinallyInUI<T>(this ITask<T> task, Action<bool, Exception, T> continuation)
+        {
+            return task.Finally(continuation, TaskAffinity.UI);
+        }
+
         public static ITask<T> ThenAsync<T>(this ITask task, Task<T> continuation, TaskAffinity affinity = TaskAffinity.Concurrent, bool always = false)
         {
             var cont = new FuncTask<T>(continuation) { Affinity = affinity, Name = $"ThenAsync<{typeof(T)}>" };

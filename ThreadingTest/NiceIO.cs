@@ -37,7 +37,10 @@ NiceIO
 GitHub.Unity
 #endif
 {
-    public class NPath : IEquatable<NPath>, IComparable
+#if NICEIO
+    public
+#endif
+    class NPath : IEquatable<NPath>, IComparable
     {
         private static StringComparison? pathStringComparison;
         private static StringComparison PathStringComparison
@@ -45,7 +48,7 @@ GitHub.Unity
             get
             {
                 if (!pathStringComparison.HasValue)
-                    pathStringComparison = IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+                    pathStringComparison = IsLinux ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
                 return pathStringComparison.Value;
             }
         }
@@ -347,6 +350,8 @@ GitHub.Unity
 
         public static implicit operator string(NPath path)
         {
+            if (path == null)
+                return null;
             return path.ToString();
         }
 
@@ -363,14 +368,14 @@ GitHub.Unity
             }
         }
 
-		public static char DirectorySeparatorChar
+        public static char DirectorySeparatorChar
         {
             get
             {
                 return FileSystem.DirectorySeparatorChar;
             }
         }
-		
+
         public override bool Equals(Object obj)
         {
             if (obj == null)
@@ -424,9 +429,9 @@ GitHub.Unity
                 // Suitable nullity checks etc, of course :)
                 hash = hash * 23 + _isRelative.GetHashCode();
                 foreach (var element in _elements)
-                    hash = hash * 23 + element.GetHashCode();
+                    hash = hash * 23 + (IsLinux ? element : element.ToUpperInvariant()).GetHashCode();
                 if (_driveLetter != null)
-                    hash = hash * 23 + _driveLetter.GetHashCode();
+                    hash = hash * 23 + (IsLinux ? _driveLetter : _driveLetter.ToUpperInvariant()).GetHashCode();
                 return hash;
             }
         }
@@ -878,8 +883,8 @@ GitHub.Unity
             ThrowIfRelative();
             return FileSystem.ReadAllLines(ToString());
         }
-		
-		public NPath WriteAllBytes(byte[] contents)
+
+        public NPath WriteAllBytes(byte[] contents)
         {
             ThrowIfRelative();
             EnsureParentDirectoryExists();
@@ -907,9 +912,15 @@ GitHub.Unity
             return true;
         }
 
-        private static bool IsLinux()
+        private static bool? isLinux;
+        private static bool IsLinux
         {
-            return FileSystem.DirectoryExists("/proc");
+            get
+            {
+                if (!isLinux.HasValue)
+                    isLinux = FileSystem.DirectoryExists("/proc");
+                return isLinux.Value;
+            }
         }
 
         private static IFileSystem _fileSystem;
@@ -928,7 +939,75 @@ GitHub.Unity
         }
     }
 
-    public static class Extensions
+#if NICEIO
+    public
+#endif
+    static class Extensions
+    {
+        public static IEnumerable<NPath> Copy(this IEnumerable<NPath> self, string dest)
+        {
+            return Copy(self, new NPath(dest));
+        }
+
+        public static IEnumerable<NPath> Copy(this IEnumerable<NPath> self, NPath dest)
+        {
+            if (dest.IsRelative)
+                throw new ArgumentException("When copying multiple files, the destination cannot be a relative path");
+            dest.EnsureDirectoryExists();
+            return self.Select(p => p.Copy(dest.Combine(p.FileName))).ToArray();
+        }
+
+        public static IEnumerable<NPath> Move(this IEnumerable<NPath> self, string dest)
+        {
+            return Move(self, new NPath(dest));
+        }
+
+        public static IEnumerable<NPath> Move(this IEnumerable<NPath> self, NPath dest)
+        {
+            if (dest.IsRelative)
+                throw new ArgumentException("When moving multiple files, the destination cannot be a relative path");
+            dest.EnsureDirectoryExists();
+            return self.Select(p => p.Move(dest.Combine(p.FileName))).ToArray();
+        }
+
+        public static IEnumerable<NPath> Delete(this IEnumerable<NPath> self)
+        {
+            foreach (var p in self)
+                p.Delete();
+            return self;
+        }
+
+        public static IEnumerable<string> InQuotes(this IEnumerable<NPath> self, SlashMode forward = SlashMode.Native)
+        {
+            return self.Select(p => p.InQuotes(forward));
+        }
+
+        public static NPath ToNPath(this string path)
+        {
+            if (path == null)
+                return null;
+            return new NPath(path);
+        }
+    }
+
+    public enum SlashMode
+    {
+        Native,
+        Forward,
+        Backward
+    }
+
+    public enum DeleteMode
+    {
+        Normal,
+        Soft
+    }
+}
+
+#if NICEIO
+    public
+#endif
+static class Extensions
     {
         public static IEnumerable<NPath> Copy(this IEnumerable<NPath> self, string dest)
         {
@@ -998,7 +1077,10 @@ GitHub.Unity
 {
     using System.IO;
 
-    public interface IFileSystem
+#if NICEIO
+    public
+#endif
+    interface IFileSystem
     {
         bool FileExists(string path);
         string Combine(string path1, string path2);
@@ -1035,6 +1117,9 @@ GitHub.Unity
         void SetCurrentDirectory(string currentDirectory);
     }
 
+#if NICEIO
+    public
+#endif
     class FileSystem : IFileSystem
     {
         private string _currentDirectory;

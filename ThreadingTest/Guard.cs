@@ -5,8 +5,21 @@ using System.Linq;
 
 namespace GitHub.Unity
 {
+    class PropertyOrFieldNullException : Exception
+    {
+        public PropertyOrFieldNullException(string message) : base(message)
+        {}
+    }
+
     static class Guard
     {
+        public static void PropertyOrFieldNotNull(object value, string name)
+        {
+            if (value != null) return;
+            string message = String.Format(CultureInfo.InvariantCulture, $"Property or Field {name} is null");
+            throw new PropertyOrFieldNullException(message);
+        }
+
         public static void ArgumentNotNull(object value, string name)
         {
             if (value != null) return;

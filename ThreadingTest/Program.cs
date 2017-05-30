@@ -14,7 +14,8 @@ namespace GitHub.Unity
             var taskManager = new TaskManager();
             var syncContext = new ThreadSynchronizationContext(taskManager.Token);
             taskManager.UIScheduler = new SynchronizationContextTaskScheduler(syncContext);
-            var processManager = new ProcessManager(new DefaultEnvironment(), new ProcessEnvironment(), taskManager.Token);
+            var env = new DefaultEnvironment();
+            var processManager = new ProcessManager(env, new ProcessEnvironment(env), taskManager.Token);
 
 
 

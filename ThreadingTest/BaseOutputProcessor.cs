@@ -114,4 +114,16 @@ namespace GitHub.Unity
             return true;
         }
     }
+
+    class FirstLineIsPathOutputProcessor : FirstResultOutputProcessor<NPath>
+    {
+        protected override bool ProcessLine(string line, out NPath result)
+        {
+            result = null;
+            if (String.IsNullOrEmpty(line))
+                return false;
+            result = line.ToNPath();
+            return true;
+        }
+    }
 }

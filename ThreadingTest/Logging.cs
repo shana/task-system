@@ -1,58 +1,116 @@
-﻿using System;
-using System.Threading;
+using System;
 
 namespace GitHub.Unity
 {
-    class Logging : ILogging
+    public static class Logging
     {
-        private Type type;
+        private static bool tracingEnabled;
 
-        internal static ILogging GetLogger(Type type)
+        public static bool TracingEnabled
         {
-            return new Logging(type);
+            get
+            {
+                return tracingEnabled;
+            }
+            set
+            {
+                if (tracingEnabled != value)
+                {
+                    tracingEnabled = value;
+                    Instance?.Info("Trace Logging " + (value ? "Enabled" : "Disabled"));
+                }
+            }
         }
 
-        internal static ILogging GetLogger<T>()
+        private static Func<string, ILogging> loggerFactory;
+
+        public static Func<string, ILogging> LoggerFactory
         {
-            return new Logging(typeof(T));
+            get { return loggerFactory; }
+            set
+            {
+                loggerFactory = value;
+                Instance = loggerFactory(null);
+            }
         }
 
-        public Logging(Type type)
+        private static ILogging instance;
+
+        private static ILogging Instance
         {
-            this.type = type;
+            get {
+                if (instance == null)
+                {
+                    instance = loggerFactory?.Invoke(null);
+                }
+                return instance;
+            }
+            set { instance = value; }
         }
 
-        public void Error(Exception innerException, string msg)
+        public static ILogging GetLogger<T>()
         {
-            msg = String.Format("{0} {1}", msg, innerException);
-            Console.Error.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
+            return GetLogger(typeof(T));
         }
 
-        public void Error(string msg, params object[] args)
+        public static ILogging GetLogger(Type type)
         {
-            if (args != null)
-                msg = string.Format(msg, args);
-            Console.Error.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
+            return GetLogger(type.Name);
         }
 
-        public void Debug(string msg, params object[] args)
+        public static ILogging GetLogger(string context = null)
         {
-            if (args != null)
-                msg = string.Format(msg, args);
-            Console.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
+            return loggerFactory(context);
         }
 
-        public void Trace(string msg, params object[] args)
+        public static void Info(string s)
         {
-            if (args != null)
-                msg = string.Format(msg, args);
-            //Console.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
+            Instance.Info(s);
         }
 
-        public void Trace(Exception innerException, string msg)
+        public static void Debug(string s)
         {
-            msg = String.Format("{0} {1}", msg, innerException);
-            //Console.WriteLine(String.Format("{0}({1}):{2}", type.Name, Thread.CurrentThread.ManagedThreadId, msg));
+            Instance.Debug(s);
+        }
+
+        public static void Trace(string s)
+        {
+            Instance.Trace(s);
+        }
+
+        public static void Warning(string s)
+        {
+            Instance.Warning(s);
+        }
+
+        public static void Error(string s)
+        {
+            Instance.Error(s);
+        }
+
+        public static void Info(string format, params object[] objects)
+        {
+            Instance.Info(format, objects);
+        }
+
+        public static void Debug(string format, params object[] objects)
+        {
+            Instance.Debug(format, objects);
+        }
+
+        public static void Trace(string format, params object[] objects)
+        {
+            Instance.Trace(format, objects);
+        }
+
+        public static void Warning(string format, params object[] objects)
+        {
+            Instance.Warning(format, objects);
+        }
+
+        public static void Error(string format, params object[] objects)
+        {
+            Instance.Error(format, objects);
         }
     }
 }

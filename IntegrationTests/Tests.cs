@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using System.Threading;
 using GitHub.Unity;
 using System.Threading.Tasks.Schedulers;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
+using System.IO;
+using NSubstitute;
 
 namespace IntegrationTests
 {
@@ -16,22 +15,56 @@ namespace IntegrationTests
     {
         protected ITaskManager TaskManager { get; set; }
         protected IProcessManager ProcessManager { get; set; }
+        protected NPath TestBasePath { get; private set; }
+        protected IFileSystem FileSystem { get; private set; }
         protected CancellationToken Token => TaskManager.Token;
         protected NPath TestApp => System.Reflection.Assembly.GetExecutingAssembly().Location.ToNPath().Combine("TestApp.exe");
+
+        [TestFixtureSetUp]
+        public void OneTimeSetup()
+        {
+            Logging.LoggerFactory = context => new ConsoleLogAdapter(context);
+
+            TaskManager = new TaskManager();
+            var syncContext = new ThreadSynchronizationContext(Token);
+            TaskManager.UIScheduler = new SynchronizationContextTaskScheduler(syncContext);
+
+
+            FileSystem = NPath.FileSystem;
+            TestBasePath = NPath.CreateTempDirectory("integration-tests");
+            FileSystem.SetCurrentDirectory(TestBasePath);
+
+            var env = new DefaultEnvironment();
+            var repo = Substitute.For<IRepository>();
+            repo.LocalPath.Returns(TestBasePath);
+            env.Repository = repo;
+
+            var platform = new Platform(env, FileSystem);
+            ProcessManager = new ProcessManager(env, platform.GitEnvironment, Token);
+            var processEnv = platform.GitEnvironment;
+            var path = processEnv.FindGitInstallationPath(ProcessManager).Start().Result;
+            env.GitExecutablePath = path;
+        }
+
+        [TestFixtureTearDown]
+        public void OneTimeTearDown()
+        {
+            TaskManager?.Stop();
+            try
+            {
+                TestBasePath.DeleteIfExists();
+            }
+            catch { }
+        }
 
         [SetUp]
         public void Setup()
         {
-            TaskManager = new TaskManager();
-            var syncContext = new ThreadSynchronizationContext(Token);
-            TaskManager.UIScheduler = new SynchronizationContextTaskScheduler(syncContext);
-            ProcessManager = new ProcessManager(new DefaultEnvironment(), new ProcessEnvironment(), Token);
         }
 
         [TearDown]
         public void Teardown()
         {
-            TaskManager?.Stop();
         }
     }
 
@@ -81,7 +114,7 @@ namespace IntegrationTests
             var runningOrder = new List<int>();
             var rand = new Randomizer();
             var tasks = new List<ActionTask>();
-            for (int i = 1; i < 11; i ++)
+            for (int i = 1; i < 11; i++)
             {
                 tasks.Add(GetTask(TaskAffinity.Concurrent, i, id => { new ManualResetEventSlim().Wait(rand.Next(100, 200)); lock (runningOrder) runningOrder.Add(id); }));
             }
@@ -307,7 +340,7 @@ namespace IntegrationTests
                 .Catch(ex =>
                 {
                     Thread.Sleep(300);
-                    lock(runOrder)
+                    lock (runOrder)
                     {
                         exception = ex;
                         runOrder.Add("catch");
@@ -557,10 +590,10 @@ namespace IntegrationTests
             var runOrder = new List<string>();
             var act = new ActionTask(Token, _ => runOrder.Add($"ran 1"))
                 .ThenAsync(new Task<int>(() =>
-                    {
-                        runOrder.Add($"ran 2");
-                        return 10;
-                    }))
+                {
+                    runOrder.Add($"ran 2");
+                    return 10;
+                }))
 
                 .ThenAsync(new FuncTask<int, int>(Token, (s, n) =>
                 {
@@ -587,7 +620,7 @@ namespace IntegrationTests
                 .Finally((_, t) => runOrder.Add("done"))
             ;
             await act.StartAwait();
-            CollectionAssert.AreEqual(new string[] { "started", "2", "21", "done"}, runOrder);
+            CollectionAssert.AreEqual(new string[] { "started", "2", "21", "done" }, runOrder);
         }
     }
 

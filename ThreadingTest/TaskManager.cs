@@ -34,7 +34,12 @@ namespace GitHub.Unity
         public void Stop()
         {
             cts.Cancel();
-            manager.Wait();
+            Wait();
+        }
+
+        public Task Wait()
+        {
+            return manager.Wait();
         }
 
         public static TaskScheduler GetScheduler(TaskAffinity affinity)

@@ -59,6 +59,7 @@
     <Compile Include="BaseOutputProcessor.cs" />
     <Compile Include="ConcurrentExclusiveInterleave.cs" />
     <Compile Include="ConfigOutputProcessor.cs" />
+    <Compile Include="ConsoleLogAdapter.cs" />
     <Compile Include="GitConfigGetTask.cs" />
     <Compile Include="GitConfigListTask.cs" />
     <Compile Include="GitConfigSource.cs" />
@@ -66,7 +67,9 @@
     <Compile Include="ILogging.cs" />
     <Compile Include="IProcessEnvironment.cs" />
     <Compile Include="IProcessManager.cs" />
+    <Compile Include="IRepository.cs" />
     <Compile Include="ITaskManager.cs" />
+    <Compile Include="LogAdapterBase.cs" />
     <Compile Include="Logging.cs" />
     <Compile Include="NiceIO.cs" />
     <Compile Include="ProcessManager.cs" />

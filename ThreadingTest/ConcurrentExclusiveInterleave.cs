@@ -124,9 +124,10 @@ namespace GitHub.Unity
             exclusiveTaskScheduler = new ConcurrentExclusiveTaskScheduler(this, new Queue<Task>(), 1);
         }
 
-        public void Wait()
+        public async Task Wait()
         {
-            taskExecuting?.Wait();
+            if (taskExecuting != null)
+                await taskExecuting;
         }
 
         /// <summary>Notifies the interleave that new work has arrived to be processed.</summary>
