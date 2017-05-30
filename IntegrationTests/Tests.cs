@@ -322,6 +322,7 @@ namespace IntegrationTests
                         finallyException = e;
                         runOrder.Add("finally");
                     }
+                    return d;
                 });
 
             await task.StartAwait();
@@ -395,6 +396,7 @@ namespace IntegrationTests
                         finallyException = e;
                         runOrder.Add("finally");
                     }
+                    return d;
                 });
 
             await task.StartAwait();
@@ -407,7 +409,7 @@ namespace IntegrationTests
         }
 
         [Test]
-        public async Task ConditionalChaining()
+        public void ConditionalChaining()
         {
             var success = false;
             Exception exception = null;
@@ -442,6 +444,7 @@ namespace IntegrationTests
                             output.Add(d);
                             finallyException = e;
                         }
+                        return d;
                     });
                 tasks.Add(task.Start());
             }
