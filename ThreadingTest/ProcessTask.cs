@@ -17,7 +17,7 @@ namespace GitHub.Unity
             return processManager.Configure(task, withInput);
         }
 
-        public static T Configure<T>(this T task, IProcessManager processManager, string executable, string arguments, string workingDirectory, bool withInput)
+        public static T Configure<T>(this T task, IProcessManager processManager, string executable, string arguments, string workingDirectory = null, bool withInput = false)
             where T : IProcess
         {
             return processManager.Configure(task, executable, arguments, workingDirectory, withInput);
@@ -81,7 +81,7 @@ namespace GitHub.Unity
             {
                 Process.OutputDataReceived += (s, e) =>
                 {
-                    //logger.Trace("OutputData \"" + (e.Data == null ? "'null'" : e.Data) + "\" exited:" + process.HasExited);
+                    //Logger.Trace("OutputData \"" + (e.Data == null ? "'null'" : e.Data) + "\"");
 
                     string encodedData = null;
                     if (e.Data != null)
@@ -96,10 +96,10 @@ namespace GitHub.Unity
             {
                 Process.ErrorDataReceived += (s, e) =>
                 {
-                    if (e.Data != null)
-                    {
-                        //logger.Trace("ErrorData \"" + (e.Data == null ? "'null'" : e.Data) + "\" exited:" + process.HasExited);
-                    }
+                    //if (e.Data != null)
+                    //{
+                    //    Logger.Trace("ErrorData \"" + (e.Data == null ? "'null'" : e.Data) + "\"");
+                    //}
 
                     string encodedData = null;
                     if (e.Data != null)
@@ -165,7 +165,7 @@ namespace GitHub.Unity
 
         private bool WaitForExit(int milliseconds)
         {
-            //logger.Debug("WaitForExit - time: {0}ms", milliseconds);
+            //Logger.Debug("WaitForExit - time: {0}ms", milliseconds);
 
             // Workaround for a bug in which some data may still be processed AFTER this method returns true, thus losing the data.
             // http://connect.microsoft.com/VisualStudio/feedback/details/272125/waitforexit-and-waitforexit-int32-provide-different-and-undocumented-implementations
@@ -304,7 +304,7 @@ namespace GitHub.Unity
 
             if (outputProcessor != null)
                 result = outputProcessor.Result;
-           
+
             if (result == null && typeof(T) == typeof(string))
                 result = (T)(object)(Process.StartInfo.CreateNoWindow ? "Process finished" : "Process running");
 
