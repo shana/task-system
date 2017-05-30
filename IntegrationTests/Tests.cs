@@ -405,6 +405,54 @@ namespace IntegrationTests
             Assert.IsNull(finallyException);
             CollectionAssert.AreEqual(new List<string> { "finally" }, runOrder);
         }
+
+        [Test]
+        public async Task ConditionalChaining()
+        {
+            var success = false;
+            Exception exception = null;
+            Exception finallyException = null;
+            var runOrder = new List<string>();
+            var output = new List<string>();
+            var bools = new List<bool>();
+            for (int i = 0; i < 10; i++)
+            {
+                bools.Add(i % 2 == 0);
+            }
+            var expectedOutput = bools.SelectMany(x => new List<string> { x.ToString().ToLower(), x ? "something" : "nothing" }).ToList();
+
+            var tasks = new List<ITask>();
+            foreach (var b in bools)
+            {
+                var task =
+                    new FuncTask<bool>(Token, _ => b)
+                    .ThenIf(go =>
+                    {
+                        output.Add(go.ToString().ToLower());
+                        if (go)
+                            return new FuncTask<string>(Token, _ => "something");
+                        else
+                            return new FuncTask<string>(Token, _ => "nothing");
+                    })
+                    .Finally((s, e, d) =>
+                    {
+                        lock (runOrder)
+                        {
+                            success = s;
+                            output.Add(d);
+                            finallyException = e;
+                        }
+                    });
+                tasks.Add(task.Start());
+            }
+
+            Task.WaitAll(tasks.Select(x => x.Task).ToArray());
+
+            Assert.IsTrue(success);
+            CollectionAssert.AreEquivalent(expectedOutput, output);
+            Assert.IsNull(exception);
+            Assert.IsNull(finallyException);
+        }
     }
 
     [TestFixture]
