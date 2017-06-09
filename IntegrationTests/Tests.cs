@@ -80,25 +80,18 @@ namespace IntegrationTests
         [Test]
         public async Task ProcessReadsFromStandardInput()
         {
-            var output = new List<string>();
-
             var input = new List<string> {
                 "Hello",
                 "World\u001A"
             };
 
-            var expectedOutput = new List<string> { "Hello", "World" };
+            var expectedOutput = "Hello";
 
-            var task = new SimpleProcessTask(TestApp, @"-s 100 -i", Token)
-                .Configure(ProcessManager, withInput: true)
-                //.Then((s, d) => output.Add(d))
-                .Finally(() => { });
+            var procTask = new SimpleProcessTask(TestApp, @"-s 100 -i", Token)
+                .Configure(ProcessManager, true);
 
-            task.OnStart += t =>
+            procTask.OnStartProcess += proc =>
             {
-                Logger.Trace("Sending output");
-
-                var proc = ((IProcess)t).Process;
                 foreach (var item in input)
                 {
                     proc.StandardInput.WriteLine(item);
@@ -106,9 +99,12 @@ namespace IntegrationTests
                 proc.StandardInput.Close();
             };
 
-            await task.StartAsAsyncWithoutThrowing();
+            var chain = procTask
+                .Finally((s, e, d) => d);
 
-            CollectionAssert.AreEqual(expectedOutput, output);
+            var output = await chain.StartAsAsync();
+
+            Assert.AreEqual(expectedOutput, output);
         }
 
         [Test]
