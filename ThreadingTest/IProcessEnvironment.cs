@@ -36,7 +36,7 @@ namespace GitHub.Unity
 
     class Platform : IPlatform
     {
-        public Platform(IEnvironment env, IFileSystem fs)
+        public Platform(IEnvironment env)
         {
             GitEnvironment = new ProcessEnvironment(env);
         }

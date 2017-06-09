@@ -10,10 +10,12 @@ namespace GitHub.Unity
         string RepositoryPath { get; }
         string GetEnvironmentVariable(string v);
         string ExpandEnvironmentVariables(string unquoted);
+        IFileSystem FileSystem { get; set; }
     }
 
     class DefaultEnvironment : IEnvironment
     {
+        public IFileSystem FileSystem { get { return NPath.FileSystem; } set { NPath.FileSystem = value; } }
         public bool IsMac { get { return false; } set { } }
 
         public bool IsWindows { get { return true; } set { } }

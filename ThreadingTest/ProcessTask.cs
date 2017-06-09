@@ -17,7 +17,8 @@ namespace GitHub.Unity
             return processManager.Configure(task, withInput);
         }
 
-        public static T Configure<T>(this T task, IProcessManager processManager, string executable, string arguments, string workingDirectory = null, bool withInput = false)
+        public static T Configure<T>(this T task, IProcessManager processManager, string executable, string arguments,
+            NPath workingDirectory = null, bool withInput = false)
             where T : IProcess
         {
             return processManager.Configure(task, executable, arguments, workingDirectory, withInput);
@@ -226,7 +227,7 @@ namespace GitHub.Unity
 
             ConfigureOutputProcessor();
 
-            Guard.PropertyOrFieldNotNull(outputProcessor, nameof(outputProcessor));
+            Guard.NotNull(this, outputProcessor, nameof(outputProcessor));
             Process = new Process { StartInfo = psi, EnableRaisingEvents = true };
             ProcessName = psi.FileName;
         }
@@ -236,7 +237,7 @@ namespace GitHub.Unity
             outputProcessor = processor ?? outputProcessor;
             ConfigureOutputProcessor();
 
-            Guard.PropertyOrFieldNotNull(outputProcessor, nameof(outputProcessor));
+            Guard.NotNull(this, outputProcessor, nameof(outputProcessor));
 
             Process = new Process { StartInfo = psi, EnableRaisingEvents = true };
             ProcessName = psi.FileName;
@@ -248,7 +249,7 @@ namespace GitHub.Unity
 
             ConfigureOutputProcessor();
 
-            Guard.PropertyOrFieldNotNull(outputProcessor, nameof(outputProcessor));
+            Guard.NotNull(this, outputProcessor, nameof(outputProcessor));
 
             Process = existingProcess;
             ProcessName = existingProcess.StartInfo.FileName;
@@ -283,13 +284,19 @@ namespace GitHub.Unity
                 RaiseOnStart,
                 () =>
                 {
-                    RaiseOnEnd();
+                    if (outputProcessor != null)
+                        result = outputProcessor.Result;
+
+                    if (result == null && typeof(T) == typeof(string))
+                        result = (T)(object)(Process.StartInfo.CreateNoWindow ? "Process finished" : "Process running");
+
+                    RaiseOnEnd(result);
+
                     if (Errors != null)
                     {
                         OnErrorData?.Invoke(Errors);
-                        if (thrownException == null)
-                            throw new ProcessException(this);
-                        else
+                        thrownException = thrownException ?? new ProcessException(this);
+                        if (!RaiseFaultHandlers(thrownException))
                             throw thrownException;
                     }
                 },
@@ -302,13 +309,12 @@ namespace GitHub.Unity
 
             wrapper.Run();
 
-            if (outputProcessor != null)
-                result = outputProcessor.Result;
-
-            if (result == null && typeof(T) == typeof(string))
-                result = (T)(object)(Process.StartInfo.CreateNoWindow ? "Process finished" : "Process running");
-
             return result;
+        }
+
+        public override string ToString()
+        {
+            return $"{Task?.Id ?? -1} {Name} {GetType()} {ProcessName} {ProcessArguments}";
         }
 
         public Process Process { get; set; }
@@ -346,7 +352,7 @@ namespace GitHub.Unity
 
             ConfigureOutputProcessor();
 
-            Guard.PropertyOrFieldNotNull(outputProcessor, nameof(outputProcessor));
+            Guard.NotNull(this, outputProcessor, nameof(outputProcessor));
 
             Process = new Process { StartInfo = psi, EnableRaisingEvents = true };
             ProcessName = psi.FileName;
@@ -357,7 +363,7 @@ namespace GitHub.Unity
             Guard.ArgumentNotNull(existingProcess, "existingProcess");
 
             ConfigureOutputProcessor();
-            Guard.PropertyOrFieldNotNull(outputProcessor, nameof(outputProcessor));
+            Guard.NotNull(this, outputProcessor, nameof(outputProcessor));
             Process = existingProcess;
             ProcessName = existingProcess.StartInfo.FileName;
         }
@@ -402,13 +408,18 @@ namespace GitHub.Unity
                 RaiseOnStart,
                 () =>
                 {
-                    RaiseOnEnd();
+                    if (outputProcessor != null)
+                        result = outputProcessor.Result;
+                    if (result == null)
+                        result = new List<T>();
+
+                    RaiseOnEnd(result);
+
                     if (Errors != null)
                     {
                         OnErrorData?.Invoke(Errors);
-                        if (thrownException == null)
-                            throw new ProcessException(this);
-                        else
+                        thrownException = thrownException ?? new ProcessException(this);
+                        if (!RaiseFaultHandlers(thrownException))
                             throw thrownException;
                     }
                 },
@@ -420,11 +431,12 @@ namespace GitHub.Unity
                 Token);
             wrapper.Run();
 
-            if (outputProcessor != null)
-                result = outputProcessor.Result;
-            if (result == null)
-                result = new List<T>();
             return result;
+        }
+
+        public override string ToString()
+        {
+            return $"{Task?.Id ?? -1} {Name} {GetType()} {ProcessName} {ProcessArguments}";
         }
 
         public Process Process { get; set; }
