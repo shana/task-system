@@ -30,7 +30,7 @@ namespace IntegrationTests
         public void OneTimeSetup()
         {
             Logging.LogAdapter = new ConsoleLogAdapter();
-            Logging.TracingEnabled = true;
+            //Logging.TracingEnabled = true;
             TaskManager = new TaskManager();
             var syncContext = new ThreadSynchronizationContext(Token);
             TaskManager.UIScheduler = new SynchronizationContextTaskScheduler(syncContext);
@@ -143,15 +143,12 @@ namespace IntegrationTests
             var results = new List<string>() { };
 
             await new ActionTask(Token, _ => {
-                Console.WriteLine("Before Process");
                 results.Add("BeforeProcess");
             }).Then(new SimpleProcessTask(TestApp, @"-s 1000 -d ""ok""", Token)
                 .Configure(ProcessManager).Then(new FuncTask<int>(Token, (b, i) => {
-                    Console.WriteLine($@"Process Output");
                     results.Add("ProcessOutput");
                     return 1234;
                 })).Finally((b, exception) => {
-                    Console.WriteLine($@"Process Finally Clause");
                     results.Add("ProcessFinally");
                 })).StartAsAsync();
 
@@ -184,7 +181,7 @@ namespace IntegrationTests
 
             TaskManager.Schedule(tasks.Cast<ITask>().ToArray());
             Task.WaitAll(tasks.Select(x => x.Task).ToArray());
-            Console.WriteLine(String.Join(",", runningOrder.Select(x => x.ToString()).ToArray()));
+            //Console.WriteLine(String.Join(",", runningOrder.Select(x => x.ToString()).ToArray()));
             Assert.AreEqual(10, runningOrder.Count);
         }
 
@@ -313,7 +310,7 @@ namespace IntegrationTests
             }
 
             Task.WaitAll(tasks.Select(x => x.Task).ToArray());
-            Console.WriteLine(String.Join(",", output.Select(x => x.Key.ToString()).ToArray()));
+            //Console.WriteLine(String.Join(",", output.Select(x => x.Key.ToString()).ToArray()));
             foreach (var t in output)
             {
                 Assert.AreEqual(uiThread, t.Value.Key, $"Task {t.Key} pass 1 should have been on ui thread {uiThread} but ran instead on {t.Value.Key}");
@@ -901,31 +898,64 @@ namespace IntegrationTests
         }
 
         [Test]
-        public void MergingTwoChainsWorks()
+        public async Task MergingTwoChainsWorks()
         {
             var callOrder = new List<string>();
+            var dependsOrder = new List<ITask>();
 
-            var chain2 = new FuncTask<int>(Token, _ =>
+            var innerChainTask1 = new ActionTask(TaskEx.FromResult(LogAndReturnResult(callOrder, "chain2 completed1", true)));
+            var innerChainTask2 = innerChainTask1.Then(_ =>
                 {
-                    callOrder.Add("chain2 FuncTask<int>");
-                    return 1;
-                })
-                .Then((s, r) =>
-                {
-                    callOrder.Add("chain2 FuncTask<int>");
-                    return r.ToString();
-                })
-                .Then((s, r) =>
-                {
-                    callOrder.Add("chain2 FuncTask<int>");
-                    return float.Parse(r);
-                })
+                    callOrder.Add("chain2 FuncTask<string>");
+                    return "1";
+                });
+
+            var innerChainTask3 = innerChainTask2
                 .Finally((s, e, d) =>
                 {
                     callOrder.Add("chain2 Finally");
+                    return d;
                 });
 
-            
+
+            var outerChainTask1 = new FuncTask<int>(Token, _ =>
+                {
+                    callOrder.Add("chain1 FuncTask<int>");
+                    return 1;
+                });
+            var outerChainTask2 = outerChainTask1.Then(innerChainTask3);
+
+            var outerChainTask3 = outerChainTask2
+                .Finally((s, e) =>
+                {
+                    callOrder.Add("chain1 Finally");
+                });
+
+            await outerChainTask3.StartAwait();
+
+            var dependsOn = outerChainTask3;
+            while (dependsOn != null)
+            {
+                dependsOrder.Add(dependsOn);
+                dependsOn = dependsOn.DependsOn;
+            }
+
+            Assert.AreEqual(innerChainTask3, outerChainTask2);
+            CollectionAssert.AreEqual(new ITask[] { outerChainTask1, innerChainTask1, innerChainTask2, innerChainTask3, outerChainTask3 }, dependsOrder.Reverse<ITask>().ToArray());
+
+            CollectionAssert.AreEqual(new string[] {
+                "chain2 completed1",
+                "chain1 FuncTask<int>",
+                "chain2 FuncTask<string>",
+                "chain2 Finally",
+                "chain1 Finally"
+            }, callOrder);
+        }
+
+        private T LogAndReturnResult<T>(List<string> callOrder, string msg, T result)
+        {
+            callOrder.Add(msg);
+            return result;
         }
     }
 
