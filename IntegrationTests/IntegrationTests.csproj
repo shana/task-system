@@ -39,6 +39,12 @@
       <HintPath>..\packages\AsyncBridge.Net35.0.2.0\lib\net35-Client\AsyncBridge.Net35.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="FluentAssertions, Version=2.2.0.0, Culture=neutral, PublicKeyToken=33f2691a05b67b6a, processorArchitecture=MSIL">
+      <HintPath>..\packages\FluentAssertions.2.2.0.0\lib\net35\FluentAssertions.dll</HintPath>
+    </Reference>
+    <Reference Include="GitHub.Logging, Version=1.2.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\GitHub.Logging.1.2.0\lib\net35\GitHub.Logging.dll</HintPath>
+    </Reference>
     <Reference Include="nunit.framework, Version=2.6.4.14350, Culture=neutral, PublicKeyToken=96d09a1eb7f44a77, processorArchitecture=MSIL">
       <HintPath>..\packages\NUnit.2.6.4\lib\nunit.framework.dll</HintPath>
       <Private>True</Private>
@@ -63,28 +69,22 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="SynchronizationContextTaskScheduler.cs" />
     <Compile Include="Tests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Schedulers.csproj">
-      <Project>{c45218f8-09e7-4f57-85bc-5d8d2ac736a3}</Project>
-      <Name>Schedulers</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\TestApp\TestApp.csproj">
-      <Project>{08b87d2a-8cf1-4211-b7aa-5209f00f72f8}</Project>
-      <Name>TestApp</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\ThreadingTest\ThreadingTest.csproj">
-      <Project>{cc97823d-5350-41f8-9ee7-b739f90197af}</Project>
-      <Name>ThreadingTest</Name>
-    </ProjectReference>
+    <Compile Include="ThreadSynchronizationContext.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TaskSystem.csproj">
+      <Project>{5888816d-e67e-4317-9a2c-9de525e65415}</Project>
+      <Name>TaskSystem</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

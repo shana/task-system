@@ -8,14 +8,20 @@ using GitHub.Unity;
 using System.Threading.Tasks.Schedulers;
 using System.IO;
 using NSubstitute;
+using GitHub.Logging;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using FluentAssertions;
 
 namespace IntegrationTests
 {
     class BaseTest
     {
+        protected const int Timeout = 30000;
+
         public BaseTest()
         {
-            Logger = Logging.GetLogger(GetType());
+            Logger = LogHelper.GetLogger(GetType());
         }
 
         protected ILogging Logger { get; }
@@ -24,20 +30,22 @@ namespace IntegrationTests
         protected IProcessManager ProcessManager { get; set; }
         protected NPath TestBasePath { get; private set; }
         protected CancellationToken Token => TaskManager.Token;
-        protected NPath TestApp => System.Reflection.Assembly.GetExecutingAssembly().Location.ToNPath().Combine("TestApp.exe");
+        protected NPath TestApp => System.Reflection.Assembly.GetExecutingAssembly().Location.ToNPath().Parent.Combine("CommandLine.exe");
 
         [TestFixtureSetUp]
         public void OneTimeSetup()
         {
-            Logging.LogAdapter = new ConsoleLogAdapter();
-            //Logging.TracingEnabled = true;
+            GitHub.Unity.Guard.InUnitTestRunner = true;
+            LogHelper.LogAdapter = new MultipleLogAdapter(new FileLogAdapter($"..\\{DateTime.UtcNow.ToString("yyyyMMddHHmmss")}-tasksystem-tests.log"));
+            //LogHelper.TracingEnabled = true;
             TaskManager = new TaskManager();
             var syncContext = new ThreadSynchronizationContext(Token);
             TaskManager.UIScheduler = new SynchronizationContextTaskScheduler(syncContext);
 
-            var env = new DefaultEnvironment();
-            TestBasePath = NPath.CreateTempDirectory("integration-tests");
+            var env = new DefaultEnvironment(new CacheContainer());
+            TestBasePath = NPath.CreateTempDirectory("integration tests");
             env.FileSystem.SetCurrentDirectory(TestBasePath);
+            env.Initialize("5.6", TestBasePath, TestBasePath, TestBasePath, TestBasePath.Combine("Assets"));
 
             var repo = Substitute.For<IRepository>();
             repo.LocalPath.Returns(TestBasePath);
@@ -46,16 +54,15 @@ namespace IntegrationTests
             var platform = new Platform(env);
             ProcessManager = new ProcessManager(env, platform.GitEnvironment, Token);
             var processEnv = platform.GitEnvironment;
-            var path = new ProcessTask<NPath>(TaskManager.Token, new FirstLineIsPathOutputProcessor())
-                .Configure(ProcessManager, env.IsWindows ? "where" : "which", "git")
-                .Start().Result;
-            env.GitExecutablePath = path ?? "git".ToNPath();
+            var installer = new GitInstaller(env, ProcessManager, TaskManager.Token);
+            var state = installer.FindSystemGit(new GitInstaller.GitInstallationState());
+            env.GitInstallationState = state;
         }
 
         [TestFixtureTearDown]
         public void OneTimeTearDown()
         {
-            TaskManager?.Stop();
+            TaskManager?.Dispose();
             try
             {
                 TestBasePath.DeleteIfExists();
@@ -72,6 +79,27 @@ namespace IntegrationTests
         public void Teardown()
         {
         }
+
+        protected void StartTest(out Stopwatch watch, out ILogging logger, [CallerMemberName] string testName = "test")
+        {
+            watch = new Stopwatch();
+            logger = LogHelper.GetLogger(testName);
+            logger.Trace("Starting test");
+        }
+
+        protected void StartTrackTime(Stopwatch watch, ILogging logger = null, string message = "")
+        {
+            if (!String.IsNullOrEmpty(message))
+                logger.Trace(message);
+            watch.Reset();
+            watch.Start();
+        }
+
+        protected void StopTrackTimeAndLog(Stopwatch watch, ILogging logger)
+        {
+            watch.Stop();
+            logger.Trace($"Time: {watch.ElapsedMilliseconds}");
+        }
     }
 
     [TestFixture]
@@ -87,7 +115,7 @@ namespace IntegrationTests
 
             var expectedOutput = "Hello";
 
-            var procTask = new SimpleProcessTask(TestApp, @"-s 100 -i", Token)
+            var procTask = new FirstNonNullLineProcessTask(Token, TestApp, @"--sleep 100 -i")
                 .Configure(ProcessManager, true);
 
             procTask.OnStartProcess += proc =>
@@ -100,11 +128,49 @@ namespace IntegrationTests
             };
 
             var chain = procTask
-                .Finally((s, e, d) => d);
+                .Finally((s, e, d) => d, TaskAffinity.Concurrent);
 
             var output = await chain.StartAsAsync();
 
             Assert.AreEqual(expectedOutput, output);
+        }
+
+        [Test]
+        public async Task ProcessOnStartOnEndTaskOrder()
+        {
+            var values = new List<string>();
+            string process1Value = null;
+            string process2Value = null;
+
+            var process1Task = new FirstNonNullLineProcessTask(Token, TestApp, @"--sleep 100 -d process1")
+                .Configure(ProcessManager, true).Then((b, s) => {
+                    process1Value = s;
+                    values.Add(s);
+                });
+
+            var process2Task = new FirstNonNullLineProcessTask(Token, TestApp, @"---sleep 100 -d process2")
+                .Configure(ProcessManager, true).Then((b, s) => {
+                    process2Value = s;
+                    values.Add(s);
+                });
+
+            var combinedTask = process1Task
+                .Then(process2Task);
+
+            combinedTask.OnStart += task => {
+                values.Add("OnStart");
+            };
+
+            combinedTask.OnEnd += (task, success, ex) => {
+                values.Add("OnEnd");
+            };
+
+            await combinedTask
+                .StartAsAsync();
+
+            Assert.AreEqual(process1Value, "process1");
+            Assert.AreEqual(process2Value, "process2");
+            Assert.True(values.SequenceEqual(new []{ "process1", "OnStart", "process2", "OnEnd" }));
         }
 
         [Test]
@@ -115,15 +181,15 @@ namespace IntegrationTests
             var output = new List<string>();
             var expectedOutput = new List<string> { "one name" };
 
-            var task = new SimpleProcessTask(TestApp, @"-s 100 -d ""one name""", Token).Configure(ProcessManager)
+            var task = new FirstNonNullLineProcessTask(Token, TestApp, @"--sleep 100 -d ""one name""").Configure(ProcessManager)
                 .Catch(ex => thrown = ex)
                 .Then((s, d) => output.Add(d))
-                .Then(new SimpleProcessTask(TestApp, @"-e kaboom -r -1", Token).Configure(ProcessManager))
+                .Then(new FirstNonNullLineProcessTask(Token, TestApp, @"-e kaboom -r -1").Configure(ProcessManager))
                 .Catch(ex => thrown = ex)
                 .Then((s, d) => output.Add(d))
-                .Finally((s, e) => success = s);
+                .Finally((s, e) => success = s, TaskAffinity.Concurrent);
 
-            await task.StartAsAsyncWithoutThrowing();
+            await task.StartAndSwallowException();
 
             Assert.IsFalse(success);
             CollectionAssert.AreEqual(expectedOutput, output);
@@ -140,13 +206,17 @@ namespace IntegrationTests
 
             await new ActionTask(Token, _ => {
                 results.Add("BeforeProcess");
-            }).Then(new SimpleProcessTask(TestApp, @"-s 1000 -d ""ok""", Token)
-                .Configure(ProcessManager).Then(new FuncTask<int>(Token, (b, i) => {
-                    results.Add("ProcessOutput");
-                    return 1234;
-                })).Finally((b, exception) => {
-                    results.Add("ProcessFinally");
-                })).StartAsAsync();
+            })
+                .Then(new FirstNonNullLineProcessTask(Token, TestApp, @"--sleep 1000 -d ""ok""")
+                    .Configure(ProcessManager)
+                    .Then(new FuncTask<int>(Token, (b, i) => {
+                        results.Add("ProcessOutput");
+                        return 1234;
+                    }))
+                    .Finally((b, exception) => {
+                        results.Add("ProcessFinally");
+                    }, TaskAffinity.Concurrent))
+                .StartAsAsync();
 
             CollectionAssert.AreEqual(expected, results);
         }
@@ -155,9 +225,9 @@ namespace IntegrationTests
     [TestFixture]
     class SchedulerTests : BaseTest
     {
-        private ActionTask GetTask(TaskAffinity affinity, int id, Action<int> body, ActionTask dependsOn = null)
+        private ActionTask GetTask(TaskAffinity affinity, int id, Action<int> body)
         {
-            return new ActionTask(Token, _ => body(id), dependsOn) { Affinity = affinity };
+            return new ActionTask(Token, _ => body(id)) { Affinity = affinity };
         }
 
         /// <summary>
@@ -175,7 +245,8 @@ namespace IntegrationTests
                 tasks.Add(GetTask(TaskAffinity.Concurrent, i, id => { new ManualResetEventSlim().Wait(rand.Next(100, 200)); lock (runningOrder) runningOrder.Add(id); }));
             }
 
-            TaskManager.Schedule(tasks.Cast<ITask>().ToArray());
+            foreach (var task in tasks)
+                TaskManager.Schedule(task);
             Task.WaitAll(tasks.Select(x => x.Task).ToArray());
             //Console.WriteLine(String.Join(",", runningOrder.Select(x => x.ToString()).ToArray()));
             Assert.AreEqual(10, runningOrder.Count);
@@ -193,36 +264,40 @@ namespace IntegrationTests
             var runningOrder = new List<int>();
             var rand = new Randomizer();
             var startTasks = new List<ActionTask>();
-            var i = 1;
-            for (var start = i; i < start + count; i++)
+            for (var i = 0; i < count; i++)
             {
-                startTasks.Add(GetTask(TaskAffinity.Concurrent, i,
+                startTasks.Add(GetTask(TaskAffinity.Concurrent, i + 1,
                     id => { new ManualResetEventSlim().Wait(rand.Next(100, 200)); lock (runningOrder) runningOrder.Add(id); }));
             }
 
             var midTasks = new List<ActionTask>();
-            for (var start = i; i < start + count; i++)
+            for (var i = 0; i < count; i++)
             {
-                midTasks.Add(GetTask(TaskAffinity.Concurrent, i,
-                    id => { new ManualResetEventSlim().Wait(rand.Next(100, 200)); lock (runningOrder) runningOrder.Add(id); },
-                    startTasks[i - 4]));
+                var previousTask = startTasks[i];
+                midTasks.Add(previousTask.Then(GetTask(TaskAffinity.Concurrent, i + 11,
+                    id => { new ManualResetEventSlim().Wait(rand.Next(100, 200)); lock (runningOrder) runningOrder.Add(id); }))
+                );;
             }
 
             var endTasks = new List<ActionTask>();
-            for (var start = i; i < start + count; i++)
+            for (var i = 0; i < count; i++)
             {
-                endTasks.Add(GetTask(TaskAffinity.Concurrent, i,
-                    id => { new ManualResetEventSlim().Wait(rand.Next(100, 200)); lock (runningOrder) runningOrder.Add(id); },
-                    midTasks[i - 7]));
+                var previousTask = midTasks[i];
+                endTasks.Add(previousTask.Then(GetTask(TaskAffinity.Concurrent, i + 21,
+                    id => { new ManualResetEventSlim().Wait(rand.Next(100, 200)); lock (runningOrder) runningOrder.Add(id); }))
+                );
             }
 
             foreach (var t in endTasks)
                 t.Start();
             Task.WaitAll(endTasks.Select(x => x.Task).ToArray());
 
-            CollectionAssert.AreEquivalent(Enumerable.Range(1, 3), runningOrder.Take(3));
-            CollectionAssert.AreEquivalent(Enumerable.Range(4, 3), runningOrder.Skip(3).Take(3));
-            CollectionAssert.AreEquivalent(Enumerable.Range(7, 3), runningOrder.Skip(6).Take(3));
+            Assert.True(runningOrder.IndexOf(21) > runningOrder.IndexOf(11));
+            Assert.True(runningOrder.IndexOf(11) > runningOrder.IndexOf(1));
+            Assert.True(runningOrder.IndexOf(22) > runningOrder.IndexOf(12));
+            Assert.True(runningOrder.IndexOf(12) > runningOrder.IndexOf(2));
+            Assert.True(runningOrder.IndexOf(23) > runningOrder.IndexOf(13));
+            Assert.True(runningOrder.IndexOf(13) > runningOrder.IndexOf(3));
         }
 
         [Test]
@@ -236,7 +311,8 @@ namespace IntegrationTests
                 tasks.Add(GetTask(TaskAffinity.Exclusive, i, id => { new ManualResetEventSlim().Wait(rand.Next(100, 200)); lock (runningOrder) runningOrder.Add(id); }));
             }
 
-            TaskManager.Schedule(tasks.Cast<ITask>().ToArray());
+            foreach (var task in tasks)
+                TaskManager.Schedule(task);
             Task.WaitAll(tasks.Select(x => x.Task).ToArray());
             Assert.AreEqual(Enumerable.Range(1, 10), runningOrder);
         }
@@ -252,7 +328,8 @@ namespace IntegrationTests
                 tasks.Add(GetTask(TaskAffinity.UI, i, id => { new ManualResetEventSlim().Wait(rand.Next(100, 200)); lock (runningOrder) runningOrder.Add(id); }));
             }
 
-            TaskManager.Schedule(tasks.Cast<ITask>().ToArray());
+            foreach (var task in tasks)
+                TaskManager.Schedule(task);
             Task.WaitAll(tasks.Select(x => x.Task).ToArray());
             Assert.AreEqual(Enumerable.Range(1, 10), runningOrder);
         }
@@ -263,11 +340,10 @@ namespace IntegrationTests
             var output = new Dictionary<int, int>();
             var tasks = new List<ITask>();
             var seed = Randomizer.RandomSeed;
-            var rand = new Randomizer(seed);
 
             var uiThread = 0;
             await new ActionTask(Token, _ => uiThread = Thread.CurrentThread.ManagedThreadId) { Affinity = TaskAffinity.UI }
-                .StartAsAsyncWithoutThrowing();
+                .StartAsAsync();
 
             for (int i = 1; i < 100; i++)
             {
@@ -287,11 +363,10 @@ namespace IntegrationTests
             var output = new Dictionary<int, KeyValuePair<int, int>>();
             var tasks = new List<ITask>();
             var seed = Randomizer.RandomSeed;
-            var rand = new Randomizer(seed);
 
             var uiThread = 0;
             await new ActionTask(Token, _ => uiThread = Thread.CurrentThread.ManagedThreadId) { Affinity = TaskAffinity.UI }
-                .StartAsAsyncWithoutThrowing();
+                .StartAsAsync();
 
             for (int i = 1; i < 100; i++)
             {
@@ -338,9 +413,9 @@ namespace IntegrationTests
                 {
                     success = s;
                     finallyException = e;
-                });
+                }, TaskAffinity.Concurrent);
 
-            await task.StartAsAsyncWithoutThrowing();
+            await task.StartAndSwallowException();
 
             Assert.IsFalse(success);
             CollectionAssert.AreEqual(expectedOutput, output);
@@ -365,9 +440,9 @@ namespace IntegrationTests
                 {
                     success = s;
                     finallyException = e;
-                });
+                }, TaskAffinity.Concurrent);
 
-            await task.StartAsAsyncWithoutThrowing();
+            await task.StartAndSwallowException();
 
             Assert.IsFalse(success);
             CollectionAssert.AreEqual(expectedOutput, output);
@@ -386,18 +461,17 @@ namespace IntegrationTests
             var expectedOutput = new List<string> { "one name" };
 
             var task =
-                new FuncTask<string>(Token, _ => "one name") { Affinity = TaskAffinity.UI }
+                new FuncTask<string>(Token, _ => "one name") { Affinity = TaskAffinity.UI, Name = "Task 1" }
                 .Then((s, d) => output.Add(d))
                 .Then(_ => { throw new Exception("an exception"); })
-                .Then(new FuncTask<string>(Token, _ => "another name") { Affinity = TaskAffinity.Exclusive })
-                .Then((s, d) =>
+                .Then(new FuncTask<string>(Token, _ => "another name") { Affinity = TaskAffinity.Exclusive, Name = "Task 2" })
+                .Then(new FuncTask<string, string>(Token, (s, d) =>
                 {
                     output.Add(d);
                     return "done";
-                })
+                }) { Name = "Task 3" })
                 .Catch(ex =>
                 {
-                    Thread.Sleep(300);
                     lock (runOrder)
                     {
                         exception = ex;
@@ -406,7 +480,6 @@ namespace IntegrationTests
                 })
                 .Finally((s, e, d) =>
                 {
-                    Thread.Sleep(300);
                     lock (runOrder)
                     {
                         success = s;
@@ -414,9 +487,9 @@ namespace IntegrationTests
                         runOrder.Add("finally");
                     }
                     return d;
-                });
+                }, TaskAffinity.Concurrent);
 
-            await task.StartAsAsyncWithoutThrowing();
+            await task.StartAndSwallowException();
 
             Assert.IsFalse(success);
             CollectionAssert.AreEqual(expectedOutput, output);
@@ -441,7 +514,7 @@ namespace IntegrationTests
                 .Then(_ => { throw new Exception("an exception"); })
                 .Then(new FuncTask<string>(Token, _ => "another name") { Affinity = TaskAffinity.Exclusive })
                 .ThenInUI((s, d) => output.Add(d))
-                .Finally((_, __) => { })
+                .Finally((_, __) => { }, TaskAffinity.Concurrent)
                 .Catch(ex => { exception = ex; });
 
             await task.Start().Task;
@@ -488,7 +561,7 @@ namespace IntegrationTests
                         runOrder.Add("finally");
                     }
                     return d;
-                })
+                }, TaskAffinity.Concurrent)
                 .ThenInUI((s, d) =>
                 {
                     lock (runOrder)
@@ -498,64 +571,13 @@ namespace IntegrationTests
                     return d;
                 });
 
-            var ret = await task.StartAsAsyncWithoutThrowing();
+            var ret = await task.StartAsAsync();
             Assert.AreEqual("done", ret);
             Assert.IsTrue(success);
             CollectionAssert.AreEqual(expectedOutput, output);
             Assert.IsNull(exception);
             Assert.IsNull(finallyException);
             CollectionAssert.AreEqual(new List<string> { "finally", "boo" }, runOrder);
-        }
-
-        [Test]
-        public void ConditionalChaining()
-        {
-            var success = false;
-            Exception exception = null;
-            Exception finallyException = null;
-            var runOrder = new List<string>();
-            var output = new List<string>();
-            var bools = new List<bool>();
-            for (int i = 0; i < 10; i++)
-            {
-                bools.Add(i % 2 == 0);
-            }
-            var expectedOutput = bools.SelectMany(x => new List<string> { x.ToString().ToLower(), x ? "something" : "nothing" }).ToList();
-
-            var tasks = new List<ITask>();
-            foreach (var b in bools)
-            {
-                var task =
-                    new FuncTask<bool>(Token, _ => b)
-                    .ThenIf(go =>
-                    {
-                        output.Add(go.ToString().ToLower());
-                        if (go)
-                            return new FuncTask<string>(Token, _ => "something");
-                        else
-                            return new FuncTask<string>(Token, _ => "nothing");
-                    })
-                    .Finally((s, e, d) =>
-                    {
-                        lock (runOrder)
-                        {
-                            success = s;
-                            output.Add(d);
-                            finallyException = e;
-                        }
-                        return d;
-                    });
-                tasks.Add(task.Start());
-            }
-
-            Task.WaitAll(tasks.Select(x => x.Task).ToArray());
-
-            Assert.IsTrue(success);
-            Assert.IsNull(exception);
-            Assert.IsNull(finallyException);
-            expectedOutput.Sort();
-            output.Sort();
-            CollectionAssert.AreEquivalent(expectedOutput, output);
         }
 
         [Test]
@@ -586,9 +608,9 @@ namespace IntegrationTests
                         finallyException = e;
                         runOrder.Add("finally");
                     }
-                });
+                }, TaskAffinity.Concurrent);
 
-            await task.StartAsAsyncWithoutThrowing();
+            await task.StartAsAsync();
 
             Assert.IsTrue(success);
             CollectionAssert.AreEqual(expectedOutput, output);
@@ -605,11 +627,14 @@ namespace IntegrationTests
         public async Task StartAndEndAreAlwaysRaised()
         {
             var runOrder = new List<string>();
-            var task = new ActionTask(Token, _ => { throw new Exception(); })
-                .Finally((s, d) => { });
+            ITask task = new ActionTask(Token, _ => { throw new Exception(); });
             task.OnStart += _ => runOrder.Add("start");
-            task.OnEnd += _ => runOrder.Add("end");
-            await task.StartAsAsyncWithoutThrowing();
+            task.OnEnd += (_, __, ___) => runOrder.Add("end");
+            // we want to run a Finally on a new task (and not in-thread) so that the StartAndSwallowException handler runs after this
+            // one, proving that the exception is propagated after everything is done
+            task = task.Finally((_, __) => {}, TaskAffinity.Concurrent);
+
+            await task.StartAndSwallowException();
             CollectionAssert.AreEqual(new string[] { "start", "end" }, runOrder);
         }
 
@@ -617,34 +642,51 @@ namespace IntegrationTests
         [ExpectedException(typeof(InvalidOperationException))]
         public async Task ExceptionPropagatesOutIfNoFinally()
         {
-            var runOrder = new List<string>();
             var task = new ActionTask(Token, _ => { throw new InvalidOperationException(); })
                 .Catch(_ => { });
             await task.StartAsAsync();
         }
 
         [Test]
-        [Ignore]
-        [ExpectedException(typeof(InvalidOperationException))]
-        public async Task DeferExceptions()
+        public async Task AllFinallyHandlersAreCalledOnException()
         {
-            var runOrder = new List<string>();
-            var task = new FuncTask<int>(Token, _ => 1)
-                .Defer(async d =>
-                {
-                    throw new InvalidOperationException();
-                    return await TaskEx.FromResult(d);
-                })
-                .Then(_ => { });
-            await task.StartAsAsync();
+            Stopwatch watch;
+            ILogging logger;
+            StartTest(out watch, out logger);
+
+            var task = new FuncTask<string>(TaskManager.Token, () => { throw new InvalidOperationException(); });
+            bool exceptionThrown1, exceptionThrown2;
+            exceptionThrown1 = exceptionThrown2 = false;
+
+            task.Finally(success => exceptionThrown1 = !success);
+            task.Finally((success, _) => exceptionThrown2 = !success);
+
+            StartTrackTime(watch);
+            var waitTask = task.Start().Task;
+            var ret = await TaskEx.WhenAny(waitTask, TaskEx.Delay(Timeout));
+            StopTrackTimeAndLog(watch, logger);
+            Assert.AreEqual(ret, waitTask);
+
+            exceptionThrown1.Should().BeTrue();
+            exceptionThrown2.Should().BeTrue();
         }
 
         [Test]
         public async Task StartAsyncWorks()
         {
-            var runOrder = new List<string>();
+            Stopwatch watch;
+            ILogging logger;
+            StartTest(out watch, out logger);
+
             var task = new FuncTask<int>(Token, _ => 1);
-            var ret = await task.StartAsAsync();
+
+            StartTrackTime(watch);
+            var waitTask = task.StartAsAsync();
+            var retTask = await TaskEx.WhenAny(waitTask, TaskEx.Delay(Timeout));
+            StopTrackTimeAndLog(watch, logger);
+            Assert.AreEqual(retTask, waitTask);
+            var ret = await waitTask;
+
             Assert.AreEqual(1, ret);
         }
 
@@ -659,8 +701,8 @@ namespace IntegrationTests
                 .Catch(e => { runOrder.Add("2"); exceptions.Add(e); })
                 .Then(_ => { throw new ArgumentNullException(); })
                 .Catch(e => { runOrder.Add("3"); exceptions.Add(e); })
-                .Finally((s, e) => { });
-            await task.StartAsAsyncWithoutThrowing();
+                .Finally((b, e) => { }, TaskAffinity.Concurrent);
+            await task.StartAndSwallowException();
             CollectionAssert.AreEqual(
                 new string[] { typeof(InvalidOperationException).Name, typeof(InvalidOperationException).Name, typeof(InvalidOperationException).Name },
                 exceptions.Select(x => x.GetType().Name).ToArray());
@@ -680,8 +722,8 @@ namespace IntegrationTests
                 .Catch(e => { runOrder.Add("2"); exceptions.Add(e); return true; })
                 .Then(_ => { throw new ArgumentNullException(); })
                 .Catch(e => { runOrder.Add("3"); exceptions.Add(e); return true; })
-                .Finally((s, e) => { });
-            await task.StartAsAsyncWithoutThrowing();
+                .Finally((s, e) => { }, TaskAffinity.Concurrent);
+            await task.StartAndSwallowException();
             CollectionAssert.AreEqual(
                 new string[] { typeof(InvalidOperationException).Name, typeof(InvalidCastException).Name, typeof(ArgumentNullException).Name },
                 exceptions.Select(x => x.GetType().Name).ToArray());
@@ -693,10 +735,30 @@ namespace IntegrationTests
         [Test]
         public async Task StartAwaitSafelyAwaits()
         {
-            var runOrder = new List<string>();
             var task = new ActionTask(Token, _ => { throw new InvalidOperationException(); })
                 .Catch(_ => { });
-            await task.StartAwait();
+            await task.StartAwait(_ => { });
+        }
+
+        [Test]
+        public async Task TaskOnFailureGetsCalledWhenExceptionHappensUpTheChain()
+        {
+            var runOrder = new List<string>();
+            var exceptions = new List<Exception>();
+            var task = new ActionTask(Token, _ => { throw new InvalidOperationException(); })
+                .Then(_ => { runOrder.Add("1"); })
+                .Catch(ex => exceptions.Add(ex))
+                .Then(() => runOrder.Add("OnFailure"), runOptions: TaskRunOptions.OnFailure)
+                .Finally((s, e) => { }, TaskAffinity.Concurrent);
+
+            await task.StartAndSwallowException();
+
+            CollectionAssert.AreEqual(
+                new string[] { typeof(InvalidOperationException).Name },
+                exceptions.Select(x => x.GetType().Name).ToArray());
+            CollectionAssert.AreEqual(
+                new string[] { "OnFailure" },
+                runOrder);
         }
     }
 
@@ -706,112 +768,11 @@ namespace IntegrationTests
         [Test]
         public async Task CanWrapATask()
         {
-            var uiThread = 0;
-            await new ActionTask(Token, _ => uiThread = Thread.CurrentThread.ManagedThreadId) { Affinity = TaskAffinity.UI }
-                .StartAsAsyncWithoutThrowing();
-
             var runOrder = new List<string>();
-            var task = new Task(() => runOrder.Add($"ran {Thread.CurrentThread.ManagedThreadId}"));
-            var act = new ActionTask(task) { Affinity = TaskAffinity.UI };
-            await act.StartAsAsyncWithoutThrowing();
-            CollectionAssert.AreEqual(new string[] { $"ran {uiThread}" }, runOrder);
-        }
-
-        /// <summary>
-        /// Always call Then or another non-Defer variant after calling Defer
-        /// </summary>
-        [Test]
-        public async Task AlwaysChainAsyncBodiesWithNonAsync()
-        {
-            var runOrder = new List<int>();
-            var act = new FuncTask<List<int>>(Token, _ => runOrder) { Name = "First" }
-                .Defer(GetData)
-                .Then((_, v) =>
-                {
-                    v.Add(2);
-                    return v;
-                })
-                .Defer(GetData2)
-                .Then((_, v) =>
-                {
-                    v.Add(4);
-                    return v;
-                })
-                .Defer(async v =>
-                {
-                    await TaskEx.Delay(10);
-                    v.Add(5);
-                    return v;
-                })
-                .Then((_, v) =>
-                {
-                    v.Add(6);
-                    return v;
-                })
-                .Defer(v => new Task<List<int>>(() =>
-                {
-                    v.Add(7);
-                    return v;
-                }), TaskAffinity.Concurrent)
-                .Finally((_, e, v) => v);
-            ;
-            var ret = await act.StartAsAsyncWithoutThrowing();
-            CollectionAssert.AreEqual(Enumerable.Range(1, 7), runOrder);
-        }
-
-        /// <summary>
-        /// Always call Then or another non-Defer variant after calling Defer
-        /// </summary>
-        [Test]
-        public async Task TwoDefersInARowWillNotWork()
-        {
-            var runOrder = new List<int>();
-            var act = new FuncTask<List<int>>(Token, _ => runOrder) { Name = "First" }
-                .Defer(GetData)
-                .Defer(GetData2)
-                .Finally((_, e, v) => v);
-            ;
-            var ret = await act.StartAsAsyncWithoutThrowing();
-            Assert.IsNull(ret);
-        }
-
-        [Test]
-        public async Task DoNotEndChainsWithDefer()
-        {
-            var runOrder = new List<int>();
-            var act = new FuncTask<List<int>>(Token, _ => runOrder) { Name = "First" }
-                .Defer(GetData)
-                .Then((_, v) =>
-                {
-                    v.Add(2);
-                    return v;
-                })
-                .Defer(GetData2)
-                .Then((_, v) =>
-                {
-                    v.Add(4);
-                    return v;
-                })
-                .Defer(async v =>
-                {
-                    await TaskEx.Delay(10);
-                    v.Add(5);
-                    return v;
-                })
-                .Then((_, v) =>
-                {
-                    v.Add(6);
-                    return v;
-                })
-                .Defer(v => new Task<List<int>>(() =>
-                {
-                    v.Add(7);
-                    return v;
-                }), TaskAffinity.Concurrent);
-            ;
-            var ret = await act.Start().Task;
-            // the last one hasn't finished before await is done
-            CollectionAssert.AreEqual(Enumerable.Range(1, 6), runOrder);
+            var task = new Task(() => runOrder.Add($"ran"));
+            var act = new TPLTask(task) { Affinity = TaskAffinity.Exclusive };
+            await act.Start().Task;
+            CollectionAssert.AreEqual(new string[] { $"ran" }, runOrder);
         }
 
         private async Task<List<int>> GetData(List<int> v)
@@ -839,9 +800,9 @@ namespace IntegrationTests
                 .Then(TaskEx.FromResult(20f), TaskAffinity.Exclusive)
                 .Then((_, n) => n + 1)
                 .Then((_, n) => runOrder.Add(n.ToString()))
-                .Finally((_, t) => runOrder.Add("done"))
+                .Finally((s, _) => runOrder.Add("done"), TaskAffinity.Concurrent)
             ;
-            await act.StartAsAsyncWithoutThrowing();
+            await act.StartAsAsync();
             CollectionAssert.AreEqual(new string[] { "started", "2", "21", "done" }, runOrder);
         }
     }
@@ -851,45 +812,65 @@ namespace IntegrationTests
     {
         class TestActionTask : ActionTask
         {
-            public TestActionTask(CancellationToken token, Action<bool> action, ITask dependsOn = null)
-                : base(token, action, dependsOn)
+            public TestActionTask(CancellationToken token, Action<bool> action)
+                : base(token, action)
             {}
 
-            public TaskBase Test_GetTopMostTask()
+            public TaskBase Test_GetFirstStartableTask()
             {
-                return base.GetTopMostTask();
-            }
-
-            public TaskBase Test_GetTopMostTaskInCreatedState()
-            {
-                return base.GetTopMostTaskInCreatedState();
+                return base.GetTopMostStartableTask();
             }
         }
 
         [Test]
-        public void GetTopMostTaskInCreatedState()
+        public async Task GetTopOfChain_ReturnsTopMostInCreatedState()
         {
-            var task1 = new ActionTask(TaskEx.FromResult(true));
+            var task1 = new ActionTask(Token, () => { });
+            await task1.StartAwait();
             var task2 = new TestActionTask(Token, _ => { });
             var task3 = new TestActionTask(Token, _ => { });
 
             task1.Then(task2).Then(task3);
 
-            var top = task3.Test_GetTopMostTaskInCreatedState();
+            var top = task3.GetTopOfChain();
             Assert.AreSame(task2, top);
         }
 
-
         [Test]
-        public void GetTopMostTask()
+        public void GetTopOfChain_ReturnsTopTaskWhenNotStarted()
         {
-            var task1 = new ActionTask(TaskEx.FromResult(true));
+            var task1 = new TPLTask(TaskEx.FromResult(true));
             var task2 = new TestActionTask(Token, _ => { });
             var task3 = new TestActionTask(Token, _ => { });
 
             task1.Then(task2).Then(task3);
 
-            var top = task3.Test_GetTopMostTask();
+            var top = task3.GetTopOfChain();
+            Assert.AreSame(task1, top);
+        }
+
+        public async Task GetFirstStartableTask_ReturnsNullWhenItsAlreadyStarted()
+        {
+            var task1 = new ActionTask(Token, () => { });
+            await task1.StartAwait();
+            var task2 = new TestActionTask(Token, _ => { });
+            var task3 = new TestActionTask(Token, _ => { });
+
+            task1.Then(task2).Then(task3);
+
+            var top = task3.Test_GetFirstStartableTask();
+            Assert.AreSame(task2, top);
+        }
+
+        public void GetFirstStartableTask_ReturnsTopTaskWhenNotStarted()
+        {
+            var task1 = new ActionTask(Token, () => { });
+            var task2 = new TestActionTask(Token, _ => { });
+            var task3 = new TestActionTask(Token, _ => { });
+
+            task1.Then(task2).Then(task3);
+
+            var top = task3.Test_GetFirstStartableTask();
             Assert.AreSame(task1, top);
         }
 
@@ -899,7 +880,7 @@ namespace IntegrationTests
             var callOrder = new List<string>();
             var dependsOrder = new List<ITask>();
 
-            var innerChainTask1 = new ActionTask(TaskEx.FromResult(LogAndReturnResult(callOrder, "chain2 completed1", true)));
+            var innerChainTask1 = new TPLTask(TaskEx.FromResult(LogAndReturnResult(callOrder, "chain2 completed1", true)));
             var innerChainTask2 = innerChainTask1.Then(_ =>
                 {
                     callOrder.Add("chain2 FuncTask<string>");
@@ -911,7 +892,7 @@ namespace IntegrationTests
                 {
                     callOrder.Add("chain2 Finally");
                     return d;
-                });
+                }, TaskAffinity.Concurrent);
 
 
             var outerChainTask1 = new FuncTask<int>(Token, _ =>
@@ -925,7 +906,7 @@ namespace IntegrationTests
                 .Finally((s, e) =>
                 {
                     callOrder.Add("chain1 Finally");
-                });
+                }, TaskAffinity.Concurrent);
 
             await outerChainTask3.StartAwait();
 
@@ -948,10 +929,129 @@ namespace IntegrationTests
             }, callOrder);
         }
 
+        [Test]
+        public async Task RunningDifferentTasksDependingOnPreviousResult()
+        {
+            var callOrder = new List<string>();
+
+            var taskEnd = new ActionTask(Token, () => callOrder.Add("chain completed")) { Name = "Chain Completed" };
+            var final = taskEnd.Finally((_, __) => { }, TaskAffinity.Exclusive);
+
+            var taskStart = new FuncTask<bool>(Token, _ =>
+                {
+                    callOrder.Add("chain start");
+                    return false;
+                }) { Name = "Chain Start" }
+                .Then(new ActionTask<bool>(Token, (_, __) =>
+                {
+                    callOrder.Add("failing");
+                    throw new InvalidOperationException();
+                }) { Name = "Failing" });
+
+            taskStart.Then(new ActionTask(Token, () =>
+            {
+                callOrder.Add("on failure");
+            }) { Name = "On Failure" }, runOptions: TaskRunOptions.OnFailure)
+            .Then(taskEnd, taskIsTopOfChain: true);
+
+            taskStart.Then(new ActionTask(Token, () =>
+            {
+                callOrder.Add("on success");
+            }) { Name = "On Success" }, runOptions: TaskRunOptions.OnSuccess)
+            .Then(taskEnd, taskIsTopOfChain: true);
+
+            await final.StartAndSwallowException();
+
+
+            Assert.AreEqual(new string[] {
+                "chain start",
+                "failing",
+                "on failure",
+                "chain completed"
+            }.Join(","), callOrder.Join(","));
+        }
+
         private T LogAndReturnResult<T>(List<string> callOrder, string msg, T result)
         {
             callOrder.Add(msg);
             return result;
+        }
+    }
+
+    [TestFixture]
+    class TaskQueueTests : BaseTest
+    {
+        [Test]
+        public void ConvertsTaskResultsCorrectly()
+        {
+            var vals = new string[] { "2.1", Math.PI.ToString(), "1" };
+            var expected = new double[] { 2.1, Math.PI, 1.0 };
+            var queue = new TaskQueue<string, double>(task => Double.Parse(task.Result));
+            vals.All(s => { queue.Queue(new TPLTask<string>(TaskEx.FromResult(s))); return true; });
+            var ret = queue.RunSynchronously();
+            Assert.AreEqual(expected.Join(","), ret.Join(","));
+        }
+
+        [Test]
+        public void ThrowsIfCannotConvert()
+        {
+            Assert.Throws<ArgumentNullException>(() => new TaskQueue<string, double>());
+            // NPath has an implicit operator to string, but we cannot verify this without using
+            // reflection, so a converter is required
+            Assert.Throws<ArgumentNullException>(() => new TaskQueue<NPath, string>());
+        }
+
+        [Test]
+        public void DoesNotThrowIfItCanConvert()
+        {
+            Assert.DoesNotThrow(() => new TaskQueue<DownloadTask, ITask>());
+        }
+
+        [Test]
+        public void FailingTasksThrowCorrectlyEvenIfFinallyIsPresent()
+        {
+            var queue = new TaskQueue();
+            var task = new ActionTask(Token, () => { throw new Exception(); })
+                .Finally((s, e) => { });
+            queue.Queue(task);
+            Assert.Throws<Exception>(() => queue.RunSynchronously());
+        }
+
+        [Test]
+        public async Task DoubleSchedulingStartsOnlyOnce()
+        {
+            var runOrder = new List<string>();
+            var queue = new TaskQueue();
+            var task1 = new FuncTask<string>(Token, () =>
+                {
+                    runOrder.Add("1");
+                    return "2";
+                });
+            task1.OnStart += _ => runOrder.Add("start 1");
+            task1.OnEnd += (a, b, c, d) => runOrder.Add("end 1");
+            var task2 = new FuncTask<string, string>(Token, (_, str) =>
+                {
+                    runOrder.Add(str);
+                    return "3";
+                });
+            task2.OnStart += _ => runOrder.Add("start 2");
+            task2.OnEnd += (a, b, c, d) => runOrder.Add("end 2");
+            var task3 = new FuncTask<string, string>(Token, (_, str) =>
+            {
+                runOrder.Add(str);
+                return "4";
+            });
+            task3.OnStart += _ => runOrder.Add("start 3");
+            task3.OnEnd += (a, b, c, d) => runOrder.Add("end 3");
+
+            queue.Queue(task1.Then(task2).Then(task3));
+            await queue.StartAwait();
+            var expected = new string[] {
+                "start 1", "1", "end 1",
+                "start 2", "2", "end 2",
+                "start 3", "3", "end 3",
+            };
+            Assert.AreEqual(expected.Join(","), runOrder.Join(","));
         }
     }
 
@@ -965,21 +1065,21 @@ namespace IntegrationTests
 
     static class AsyncExtensions
     {
-        public static Task<T> StartAsAsyncWithoutThrowing<T>(this ITask<T> task)
+        public static Task<T> StartAndSwallowException<T>(this ITask<T> task)
         {
             var tcs = new TaskCompletionSource<T>();
-            task.Then((s, d) =>
+            task.Then((success, result) =>
             {
-                tcs.SetResult(d);
-            });
+                tcs.SetResult(result);
+            }, TaskAffinity.Concurrent);
             task.Start();
             return tcs.Task;
         }
 
-        public static Task<bool> StartAsAsyncWithoutThrowing(this ITask task)
+        public static Task StartAndSwallowException(this ITask task)
         {
             var tcs = new TaskCompletionSource<bool>();
-            task.Then(tcs.SetResult);
+            task.Then(s => { tcs.SetResult(s); });
             task.Start();
             return tcs.Task;
         }
